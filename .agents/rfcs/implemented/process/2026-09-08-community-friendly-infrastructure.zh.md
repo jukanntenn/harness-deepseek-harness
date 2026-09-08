@@ -44,7 +44,7 @@ Discussions 以六个默认类目启用，配受控文案——Announcements（�
 
 ### CODEOWNERS 把评审路由到评审身份
 
-`* @gh2bda` 把每次变更路由到实际做评审与批准的账户，与[身份模型](../feature/2026-09-08-user-account-issue-policy.zh.md)一致：PR 以 jukanntenn（agent 绑定的开发者身份）提交，批准以 gh2bda 在浏览器进行，作者不能自批。注释式未来 owner 槽位映射各领域包；信任边界注记让 `.github/workflows/` 与 `.github/issue-management/` 保持维护者持有——它们铸造 CI 凭据、校验受信策略。code-owner 必审保持关闭；一个批准门是一种机制。
+`* @gh2bda` 把每次变更路由到实际做评审与批准的账户，与[身份模型](../feature/2026-09-08-user-account-issue-policy.zh.md)一致：开发者身份（agent 绑定的账户）提交 PR，机器账号在浏览器端评审与批准，作者不能自批。登录名是部署事实，由 `CODEOWNERS` 的路由行与策略配置的 `lifecycleActor` 承载；本记录绑定角色，不绑定用户名——换一套账户体系时改这两处事实即可，决策不变。注释式未来 owner 槽位映射各领域包；信任边界注记让 `.github/workflows/` 与 `.github/issue-management/` 保持维护者持有——它们铸造 CI 凭据、校验受信策略。code-owner 必审保持关闭；一个批准门是一种机制。
 
 ### git 外资产以本记录为防漂移清单
 

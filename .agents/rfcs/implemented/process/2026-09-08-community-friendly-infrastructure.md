@@ -44,7 +44,7 @@ Discussions is enabled with the six default categories carrying curated copy —
 
 ### CODEOWNERS routes review to the reviewing identity
 
-`* @gh2bda` routes every change to the account that reviews and approves, matching the [identity model](../feature/2026-09-08-user-account-issue-policy.md): pull requests are authored as jukanntenn (the developer identity the agent is bound to), approvals happen as gh2bda in the browser, and the author cannot self-approve. Commented future-owner slots map the domain packages, and a trust-boundary note keeps `.github/workflows/` and `.github/issue-management/` maintainer-owned: they mint CI credentials and validate the trusted policy. Code-owner-required reviews stay off; one approval gate is one mechanism.
+`* @gh2bda` routes every change to the account that reviews and approves, matching the [identity model](../feature/2026-09-08-user-account-issue-policy.md): the developer identity (the account the agent is bound to) authors pull requests, the machine account reviews and approves in the browser, and an author cannot self-approve. The login names are deployment facts carried by the `CODEOWNERS` routing line and the policy config's `lifecycleActor`; this record binds the roles, not the usernames — switching to a different account setup changes those two facts, not the decision. Commented future-owner slots map the domain packages, and a trust-boundary note keeps `.github/workflows/` and `.github/issue-management/` maintainer-owned: they mint CI credentials and validate the trusted policy. Code-owner-required reviews stay off; one approval gate is one mechanism.
 
 ### Out-of-git assets are recorded here as the drift-proof inventory
 
