@@ -7,6 +7,7 @@ import pytest
 from hdsh.policy.config import PolicyConfig
 from hdsh.policy.rules import (
     References,
+    classification_from_labels,
     count_visible_units,
     next_resolving_issue_status,
     parse_references,
@@ -18,7 +19,7 @@ from hdsh.policy.rules import (
     validate_issue,
     validate_pull_request,
 )
-from tests.policy.support import CONFIG, LEGAL_ISSUE, reviewed_pull, with_details
+from tests.policy.support import CONFIG, LEGAL_ISSUE, USER_CONFIG, reviewed_pull, with_details
 
 CANONICAL_KINDS = [
     "kind/feature",
@@ -126,9 +127,23 @@ class TestValidateIssue:
             validate_issue({**LEGAL_ISSUE, "labels": ["area/infra", "source/member"]}, CONFIG) == []
         )
 
-    def test_requires_native_type(self) -> None:
+    def test_requires_known_type(self) -> None:
         errors = validate_issue({**LEGAL_ISSUE, "type": "Epic"}, CONFIG)
-        assert "Type must be one of the five native English Types" in errors
+        assert "Type must be one of the five English Types" in errors
+
+    def test_rejects_type_labels_on_organization_accounts(self) -> None:
+        errors = validate_issue({**LEGAL_ISSUE, "labels": ["type/bug"]}, CONFIG)
+        assert "Issue must not use type/* labels on organization accounts: type/bug" in errors
+
+    def test_allows_type_labels_on_user_accounts(self) -> None:
+        assert validate_issue({**LEGAL_ISSUE, "labels": ["type/idea"]}, USER_CONFIG) == []
+
+    def test_classification_from_labels(self) -> None:
+        assert classification_from_labels(["type/bug", "area/infra"]) == "Bug"
+        assert classification_from_labels([]) is None
+        assert classification_from_labels(["type/bug", "type/idea"]) is None
+        assert classification_from_labels(["type/epic"]) is None
+        assert classification_from_labels(["bug", "area/infra"]) is None
 
     def test_none_type_reports_type(self) -> None:
         issue = {
@@ -380,6 +395,9 @@ class TestValidatePullRequest:
         assert "source/* is for Issues only: source/internal-pr" in validate_pull_request(
             reviewed_pull(["kind/feature", "area/web", "source/internal-pr"])
         )
+        assert "type/* is for Issues only: type/bug" in validate_pull_request(
+            reviewed_pull(["kind/feature", "area/web", "type/bug"])
+        )
 
     def test_multiple_priorities_rejected(self) -> None:
         errors = validate_pull_request(reviewed_pull(["kind/feature", "area/web", "p0", "p1"]))
@@ -435,26 +453,28 @@ class TestValidatePullRequest:
         assert "PR Priority should be p2" in validate_pull_request(mixed)
 
 
+def _minimal_config() -> str:
+    """The smallest valid organization-flavor config for edge tests."""
+    return (
+        '{"owner": "o", "accountType": "organization", "repository": "r",'
+        ' "projectNumber": 1, "projectTitle": "T", "lifecycleActor": "a",'
+        ' "priorityField": "Priority", "startDateField": "Start Date",'
+        ' "projectTimeZone": "UTC", "statuses": ["In progress", "In review", "Done"]}'
+    )
+
+
 class TestRuleEdges:
     def test_details_close_without_open(self) -> None:
         units = count_visible_units("x</details>y")
         assert units.balanced is False
 
     def test_validate_body_owner_in_assignees_branch(self) -> None:
-        config = PolicyConfig.from_json(
-            '{"organization": "o", "repository": "r", "projectNumber": 1, "projectTitle": "T",'
-            ' "lifecycleActor": "a", "priorityField": "Priority", "startDateField": "Start Date",'
-            ' "projectTimeZone": "UTC", "statuses": ["In progress", "In review", "Done"]}'
-        )
+        config = PolicyConfig.from_json(_minimal_config())
         body = "Owner: @alice\n\nSummary.\n\n<details><summary>s</summary>b</details>"
         assert validate_body(body, ["alice", "bob"], config) == []
 
     def test_validate_issue_closed_non_terminal(self) -> None:
-        config = PolicyConfig.from_json(
-            '{"organization": "o", "repository": "r", "projectNumber": 1, "projectTitle": "T",'
-            ' "lifecycleActor": "a", "priorityField": "Priority", "startDateField": "Start Date",'
-            ' "projectTimeZone": "UTC", "statuses": ["In progress", "In review", "Done"]}'
-        )
+        config = PolicyConfig.from_json(_minimal_config())
         issue = {
             "title": "Closed work",
             "body": "S.\n\n<details><summary>s</summary>b</details>",
@@ -469,11 +489,7 @@ class TestRuleEdges:
         assert any("open Issue" in e for e in validate_issue(issue, config))
 
     def test_first_nonblank_skips_blank_lines(self) -> None:
-        config = PolicyConfig.from_json(
-            '{"organization": "o", "repository": "r", "projectNumber": 1, "projectTitle": "T",'
-            ' "lifecycleActor": "a", "priorityField": "Priority", "startDateField": "Start Date",'
-            ' "projectTimeZone": "UTC", "statuses": ["In progress", "In review", "Done"]}'
-        )
+        config = PolicyConfig.from_json(_minimal_config())
         body = "\n\nSummary.\n\n<details><summary>s</summary>b</details>"
         errors = validate_body(body, [], config)
         assert all("Owner" not in e for e in errors)

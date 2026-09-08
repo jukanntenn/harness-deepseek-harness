@@ -1,9 +1,10 @@
 {
-  "organization": "jukanntenn",
+  "owner": "jukanntenn",
+  "accountType": "user",
   "repository": "harness-deepseek-harness",
   "projectNumber": 1,
   "projectTitle": "HDSH Issue Management",
-  "lifecycleActor": "hdsh-issue-management",
+  "lifecycleActor": "gh2bda",
   "priorityField": "Priority",
   "startDateField": "Start Date",
   "projectTimeZone": "Asia/Shanghai",

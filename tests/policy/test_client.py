@@ -10,7 +10,7 @@ import pytest
 from hdsh.policy.client import GitHubPolicyClient, client_from_environment
 from hdsh.policy.config import PolicyConfig
 from tests.helpers import project_payload
-from tests.policy.support import CONFIG, config_with, make_client, routing_transport
+from tests.policy.support import CONFIG, USER_CONFIG, config_with, make_client, routing_transport
 
 
 def _empty_rest(*args: object, **kwargs: object) -> tuple[int, str]:
@@ -52,6 +52,7 @@ def project_graphql_data(
     start_date_field: bool = True,
     start_date_type: str = "DATE",
     start_date_issue_field: bool = False,
+    account: str = "organization",
 ) -> dict[str, Any]:
     status_options = [{"id": f"{status}-option-id", "name": status} for status in CONFIG.statuses]
     fields: list[dict[str, Any]] = [
@@ -83,7 +84,7 @@ def project_graphql_data(
             }
         )
     return {
-        "organization": {
+        account: {
             "projectV2": {
                 "id": "project-id",
                 "title": "HDSH Issue Management",
@@ -147,6 +148,8 @@ class TestClient:
             assert body is not None
             request = json.loads(body)
             assert request["variables"]["priorityField"] == "Priority"
+            assert request["variables"]["isOrganization"] is True
+            assert request["variables"]["isUser"] is False
             return 200, json.dumps({"data": project_graphql_data(priority="P1")})
 
         client = make_client(routing_transport(rest, graphql))
@@ -188,6 +191,61 @@ class TestClient:
 
         client = make_client(routing_transport(rest, graphql))
         assert client.issue_snapshot(42) is None
+
+    def test_user_flavor_queries_the_user_project_entry(self) -> None:
+        def graphql(
+            url: str,
+            method: str = "POST",
+            body: str | None = None,
+            headers: dict[str, str] | None = None,
+        ) -> tuple[int, str]:
+            assert body is not None
+            request = json.loads(body)
+            if "query(" in request["query"]:
+                variables = request["variables"]
+                assert variables["owner"] == "hdsh"
+                assert variables["isOrganization"] is False
+                assert variables["isUser"] is True
+                return 200, json.dumps({"data": project_graphql_data(account="user")})
+            return 200, json.dumps(
+                {"data": {"updateProjectV2ItemFieldValue": {"projectV2Item": {"id": "item-id"}}}}
+            )
+
+        client = make_client(routing_transport(_empty_rest, graphql), config=USER_CONFIG)  # type: ignore[misc]
+        context = client.project_context(1)
+        assert context["project"]["title"] == "HDSH Issue Management"
+
+    def test_issue_snapshot_user_flavor_reads_type_from_labels(self) -> None:
+        def rest(
+            url: str,
+            method: str = "GET",
+            body: str | None = None,
+            headers: dict[str, str] | None = None,
+        ) -> tuple[int, str]:
+            return 200, json.dumps(
+                {
+                    "node_id": "issue-id",
+                    "title": "User-account work",
+                    "body": None,
+                    "assignees": [],
+                    "labels": [{"name": "type/bug"}, {"name": "area/infra"}],
+                    "state": "open",
+                    "state_reason": None,
+                }
+            )
+
+        def graphql(
+            url: str,
+            method: str = "POST",
+            body: str | None = None,
+            headers: dict[str, str] | None = None,
+        ) -> tuple[int, str]:
+            return 200, json.dumps({"data": project_graphql_data(account="user")})
+
+        client = make_client(routing_transport(rest, graphql), config=USER_CONFIG)  # type: ignore[misc]
+        issue = client.issue_snapshot(42)
+        assert issue is not None
+        assert issue["type"] == "Bug"
 
     def test_initialize_start_date_writes_empty_value(self) -> None:
         requests: list[dict[str, Any]] = []
@@ -762,7 +820,8 @@ def test_client_from_environment_falls_back_to_github_token(
 
 UTC_CONFIG = json.dumps(
     {
-        "organization": "hdsh",
+        "owner": "hdsh",
+        "accountType": "organization",
         "repository": "hdsh",
         "projectNumber": 1,
         "projectTitle": "HDSH Issue Management",

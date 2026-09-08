@@ -2,9 +2,8 @@
 name: Task
 about: Clear-cut work that is neither a Feature nor a Bug
 title: ''
-labels: ''
 assignees: ''
-type: Task
+labels: type/task
 ---
 
 <!-- Title states an English action or outcome; exposed body stays within 50 units. -->

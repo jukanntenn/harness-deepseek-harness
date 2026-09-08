@@ -57,7 +57,7 @@ Tests never need real credentials; no live API is reachable from this repository
 - **Prefer symmetry for parallel values**; unexplained asymmetry usually signals a missed extraction.
 - **Tests describe behavior, not correctness.** Change obsolete behavior with its tests; explain why in the PR.
 - **Non-trivial changes MUST include an RFC** in `.agents/rfcs/` in the same PR ([rules](.agents/rfcs/README.md)); only mechanical, local edits are exempt.
-- **Labels:** one PR `kind/*`, all material `area/*`, a native Issue Type on Issues; `source/*` is Issue-only ([policy](src/hdsh/policy/)).
+- **Labels:** one PR `kind/*`, all material `area/*`, a classified Issue — native Type on organization accounts, `type/*` label on user accounts; `source/*` is Issue-only ([policy](src/hdsh/policy/)).
 - **Choose PR history deliberately.** Split independent changes and fix the introducing PR before propagation; follow the workflows in [.agents/skills/](.agents/skills/) for stacked branches, `--force-with-lease` pushes, and checkpoint handling.
 - **Wire mechanically checkable invariants into an executed top-level gate** and prove each changed acceptance path rejects an invalid case.
 - TODO markers: `FIXME`/`TODO`/`XXX` by urgency ([semantics](docs/development.md)).

@@ -2,9 +2,8 @@
 name: Idea
 about: Record an uncommitted idea that still has actionable potential
 title: ''
-labels: ''
 assignees: ''
-type: Idea
+labels: type/idea
 ---
 
 <!-- Title states an English action or outcome; exposed body stays within 50 units. -->

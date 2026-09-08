@@ -240,7 +240,10 @@ The thing might be wrong.
 
 
 def project_payload(
-    *, title: str | None = "HDSH Issue Management", status_field: bool = True
+    *,
+    title: str | None = "HDSH Issue Management",
+    status_field: bool = True,
+    account: str = "organization",
 ) -> dict[str, Any]:
     """A minimal ProjectV2 GraphQL response for policy-client tests."""
 
@@ -276,9 +279,7 @@ def project_payload(
         }
     )
     return {
-        "organization": {
-            "projectV2": {"id": "project-id", "title": title, "fields": {"nodes": fields}}
-        },
+        account: {"projectV2": {"id": "project-id", "title": title, "fields": {"nodes": fields}}},
         "repository": {
             "issue": {
                 "id": "issue-id",

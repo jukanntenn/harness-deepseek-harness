@@ -32,13 +32,24 @@ class TestPolicyConfigValidation:
             PolicyConfig.from_json(config_with(projectTimeZone="Mars/Olympus"))
 
     def test_rejects_bad_json(self) -> None:
-        with pytest.raises(ValueError, match="config.organization"):
+        with pytest.raises(ValueError, match="config.owner"):
             PolicyConfig.from_json("{}")
+
+    def test_rejects_unknown_account_type(self) -> None:
+        with pytest.raises(ValueError, match="accountType must be one of"):
+            PolicyConfig.from_json(config_with(accountType="team"))
+
+    def test_rejects_missing_account_type(self) -> None:
+        payload = json.loads(config_with())
+        del payload["accountType"]
+        with pytest.raises(ValueError, match="config.accountType must be a string"):
+            PolicyConfig.from_json(json.dumps(payload))
 
     def test_config_requires_active_statuses(self) -> None:
         content = json.dumps(
             {
-                "organization": "o",
+                "owner": "o",
+                "accountType": "organization",
                 "repository": "r",
                 "projectNumber": 1,
                 "projectTitle": "T",
@@ -55,7 +66,8 @@ class TestPolicyConfigValidation:
     @pytest.mark.parametrize(
         ("field", "value"),
         [
-            ("organization", None),
+            ("owner", None),
+            ("accountType", None),
             ("projectTitle", 3),
             ("lifecycleActor", None),
             ("priorityField", ""),

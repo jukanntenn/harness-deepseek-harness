@@ -16,6 +16,7 @@ from typing import Any
 
 from hdsh.policy.config import PolicyConfig
 from hdsh.policy.rules import (
+    classification_from_labels,
     next_resolving_issue_status,
     parse_references,
     project_date,
@@ -146,20 +147,23 @@ class GitHubPolicyClient:
         Returns:
             Issue snapshot, or ``None`` when the number identifies a pull request.
         """
-        issue = self._api(
-            f"/repos/{self.config.organization}/{self.config.repository}/issues/{number}"
-        )
+        issue = self._api(f"/repos/{self.config.owner}/{self.config.repository}/issues/{number}")
         if issue.get("pull_request") is not None:
             return None
         context = self.project_context(number)
+        labels = [label["name"] for label in issue["labels"]]
         return {
             "number": number,
             "nodeId": issue["node_id"],
             "title": issue["title"],
             "body": issue.get("body") or "",
             "assignees": [a["login"] for a in issue["assignees"]],
-            "labels": [label["name"] for label in issue["labels"]],
-            "type": (issue.get("type") or {}).get("name"),
+            "labels": labels,
+            "type": (
+                (issue.get("type") or {}).get("name")
+                if self.config.account_type == "organization"
+                else classification_from_labels(labels)
+            ),
             "priority": (context["item"].get("priorityValue") or {}).get("name")
             if context["item"]
             else None,
@@ -177,10 +181,11 @@ class GitHubPolicyClient:
         }
 
     _PROJECT_QUERY: str = """
-    query($organization: String!, $repository: String!, $number: Int!,
-          $project: Int!, $includeStatusActor: Boolean!, $includeStartDate: Boolean!,
+    query($owner: String!, $repository: String!, $number: Int!,
+          $project: Int!, $isOrganization: Boolean!, $isUser: Boolean!,
+          $includeStatusActor: Boolean!, $includeStartDate: Boolean!,
           $priorityField: String!, $startDateField: String!) {
-      organization(login: $organization) {
+      organization(login: $owner) @include(if: $isOrganization) {
         projectV2(number: $project) {
           id
           title
@@ -194,7 +199,21 @@ class GitHubPolicyClient:
           }
         }
       }
-      repository(owner: $organization, name: $repository) {
+      user(login: $owner) @include(if: $isUser) {
+        projectV2(number: $project) {
+          id
+          title
+          fields(first: 50) {
+            nodes {
+              ... on ProjectV2Field { id name dataType isIssueField }
+              ... on ProjectV2SingleSelectField {
+                id name dataType isIssueField options { id name }
+              }
+            }
+          }
+        }
+      }
+      repository(owner: $owner, name: $repository) {
         issue(number: $number) {
           id
           timelineItems(last: 100, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT])
@@ -245,17 +264,20 @@ class GitHubPolicyClient:
         data = self._graphql(
             self._PROJECT_QUERY,
             {
-                "organization": config.organization,
+                "owner": config.owner,
                 "repository": config.repository,
                 "number": number,
                 "project": config.project_number,
+                "isOrganization": config.account_type == "organization",
+                "isUser": config.account_type == "user",
                 "includeStatusActor": include_status_actor,
                 "includeStartDate": include_start_date,
                 "priorityField": config.priority_field,
                 "startDateField": config.start_date_field,
             },
         )
-        project = ((data.get("organization") or {}).get("projectV2")) or None
+        account = data.get("organization") or data.get("user") or {}
+        project = account.get("projectV2") or None
         issue = ((data.get("repository") or {}).get("issue")) or None
         if not project or project["title"] != config.project_title:
             msg = "target Project is missing or its title does not match"
@@ -425,7 +447,7 @@ class GitHubPolicyClient:
             number: Same-repository Issue number.
             errors: Current validation errors.
         """
-        repo = f"/repos/{self.config.organization}/{self.config.repository}"
+        repo = f"/repos/{self.config.owner}/{self.config.repository}"
         comments = self._api(f"{repo}/issues/{number}/comments?per_page=100")
         existing = next(
             (
@@ -479,7 +501,7 @@ class GitHubPolicyClient:
     def _resolving_references_snapshot(self, number: int, pull: dict[str, Any]) -> dict[str, Any]:
         references = parse_references(
             pull.get("body") or "",
-            f"{self.config.organization}/{self.config.repository}",
+            f"{self.config.owner}/{self.config.repository}",
         )
         issues: dict[int, Any] = {}
         for issue_number in references.all:
@@ -506,7 +528,7 @@ class GitHubPolicyClient:
         Returns:
             The validated-policy snapshot.
         """
-        repo = f"/repos/{self.config.organization}/{self.config.repository}"
+        repo = f"/repos/{self.config.owner}/{self.config.repository}"
         pull = self._api(f"{repo}/pulls/{number}")
         review_requests = self._api(f"{repo}/pulls/{number}/requested_reviewers")
         reviews = self._api(f"{repo}/pulls/{number}/reviews?per_page=100")
@@ -529,9 +551,7 @@ class GitHubPolicyClient:
         Returns:
             Snapshot including ``createdAt``.
         """
-        pull = self._api(
-            f"/repos/{self.config.organization}/{self.config.repository}/pulls/{number}"
-        )
+        pull = self._api(f"/repos/{self.config.owner}/{self.config.repository}/pulls/{number}")
         return {
             **self._resolving_references_snapshot(number, pull),
             "createdAt": pull["created_at"],

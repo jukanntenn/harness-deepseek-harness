@@ -6,7 +6,7 @@
 
 ## 仓库内容
 
-- **议题策略**（`.github/issue-management/`、`.github/workflows/issue-policy.yml`、`issue-lifecycle.yml`）：议题模板、PR 模板，以及一个校验议题正文、标题、标签、原生 Type、Project 状态，校验 PR 标签分类（恰好一个 `kind/*`、至少一个 `area/*`）、同仓议题引用与 Priority 同步，并把事件驱动的生命周期流转（`review_requested` → In review，`changes_requested` → In progress）投影到被解决议题 Project 状态上的 Python 引擎。
+- **议题策略**（`.github/issue-management/`、`.github/workflows/issue-policy.yml`、`issue-lifecycle.yml`）：议题模板、PR 模板，以及一个校验议题正文、标题、标签、议题分类（组织账户用原生 Type、个人账户用 `type/*` 标签）、Project 状态，校验 PR 标签分类（恰好一个 `kind/*`、至少一个 `area/*`）、同仓议题引用与 Priority 同步，并把事件驱动的生命周期流转（`review_requested` → In review，`changes_requested` → In progress）投影到被解决议题 Project 状态上的 Python 引擎。
 - **双语文档配对**（`hdsh.pairing`）：范围内每篇文档都是英文/中文配对，外加记录 blob hash 的一致性 sidecar（`foo.i18n.yaml`），由 `hdsh-pairing-verify` 强制执行，并由 fail-closed 的 Git 合并驱动跨合并合成；`hdsh pairing brief` 为扩展翻译工作流渲染最小更新的工作集。契约见 [docs/i18n/README.zh.md](docs/i18n/README.zh.md)。
 - **文档门禁**（`hdsh.docs`）：`hdsh-docs-wrap` 强制每个散文段落占一个物理行，`hdsh-docs-links` 验证相对链接与 `#fragment` 锚点可解析，`hdsh-docs-budgets` 让常驻文档保持在 `wc -w` 词数上限内；各自语料范围来自 `.hdsh/docs.manifest.json`。
 - **PR 工作流工具**：`hdsh-scope` 报告一次变更的显式已提交与 worktree 范围；`hdsh worktree install` 以拒绝覆盖的安全性安装 worktree 本地的 prek 钩子与合并驱动；`.agents/skills/` 承载 pre-push、堆叠 PR 合并、代码评审与 CI 可靠性工作流；`.agents/rfcs/` 保存拥有“为什么”的 RFC（决策记录）。

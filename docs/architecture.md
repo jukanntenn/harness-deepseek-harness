@@ -37,7 +37,7 @@ The docs domain keeps the Markdown corpus mechanically tidy: one physical line p
 
 ## Policy
 
-The policy domain is the only one that talks to the GitHub API: `policy/rules.py` validates Issue bodies, titles, labels, native Types, and PR label taxonomy; `policy/client.py` separates repository reads from Project reads with distinct credentials; `policy/commands.py` drives the two workflow entry points (`pr`, `lifecycle`) from a validated config file and the event payload. The workflow glue lives in `.github/workflows/` and calls the CLI directly — no inline workflow Python ([decision](../.agents/rfcs/implemented/process/2026-09-07-github-workflow.md)).
+The policy domain is the only one that talks to the GitHub API: `policy/rules.py` validates Issue bodies, titles, labels, Issue classification (native Type on organization accounts, `type/*` label on user accounts), and PR label taxonomy; `policy/client.py` separates repository reads from Project reads with distinct credentials and reaches the Project through the organization or user GraphQL entry; `policy/commands.py` drives the two workflow entry points (`pr`, `lifecycle`) from a validated config file and the event payload. The workflow glue lives in `.github/workflows/` and calls the CLI directly — no inline workflow Python ([decision](../.agents/rfcs/implemented/process/2026-09-07-github-workflow.md)).
 
 ## Worktree and scope
 

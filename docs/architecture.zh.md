@@ -37,7 +37,7 @@ docs 域保持 Markdown 语料的机械整洁：每个散文段落一个物理�
 
 ## Policy
 
-policy 域是唯一与 GitHub API 交互的域：`policy/rules.py` 校验 Issue 正文、标题、标签、原生 Type 与 PR 标签分类；`policy/client.py` 以互不相同的凭据分离仓库读取与 Project 读取；`policy/commands.py` 从经过校验的配置文件与事件载荷驱动两个工作流入口（`pr`、`lifecycle`）。工作流粘合层在 `.github/workflows/` 并直接调用 CLI——工作流中没有内联 Python（[决策](../.agents/rfcs/implemented/process/2026-09-07-github-workflow.zh.md)）。
+policy 域是唯一与 GitHub API 交互的域：`policy/rules.py` 校验 Issue 正文、标题、标签、议题分类（组织账户用原生 Type、个人账户用 `type/*` 标签）与 PR 标签分类；`policy/client.py` 以互不相同的凭据分离仓库读取与 Project 读取，并经 organization 或 user 的 GraphQL 入口抵达 Project；`policy/commands.py` 从经过校验的配置文件与事件载荷驱动两个工作流入口（`pr`、`lifecycle`）。工作流粘合层在 `.github/workflows/` 并直接调用 CLI——工作流中没有内联 Python（[决策](../.agents/rfcs/implemented/process/2026-09-07-github-workflow.zh.md)）。
 
 ## Worktree 与 scope
 

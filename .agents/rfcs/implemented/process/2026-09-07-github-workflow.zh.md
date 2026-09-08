@@ -49,7 +49,7 @@ Issue 生命周期工作流（`.github/workflows/issue-lifecycle.yml`）把评�
 
 `HDSH Issue Management` Project 以 Project 自定义字段的形式拥有 `Priority` 和 `Start Date`。政策从配置的 Project 解析这两个字段，拒绝基于 Issue 的字段或错误的数据类型，从 Project 条目读取 `Priority`，并通过 `updateProjectV2ItemFieldValue` 写入 `Start Date`。
 
-政策工作流用仓库 `GITHUB_TOKEN` 做 REST 的 Issue 与 pull request 读取，用一个仅限仓库 Issues 和组织 Projects 读权限的 GitHub App 令牌做 ProjectV2 查询；生命周期的变更操作使用具有写权限的 App 令牌。生命周期工作流只在 `pull_request.opened` 时初始化 `Start Date`：它读取 pull request 的实时正文，保留每个解析为 Issue 的同仓库引用，把 `created_at` 转换为配置的 Project 时区下的日历日期，确保该 Issue 是 Project 条目，且仅当 Project 当前值为空时才写入日期。
+政策工作流用仓库 `GITHUB_TOKEN` 做 REST 的 Issue 与 pull request 读取，用一个仅限仓库 Issues 和组织 Projects 读权限的 GitHub App 令牌做 ProjectV2 查询；生命周期的变更操作使用具有写权限的 App 令牌。个人账户部署以一枚只带 `project` scope 的 classic PAT（`HDSH_PROJECT_PAT`）取代 App 做 ProjectV2，REST 走 `github.token`；该形态由[个人账户支持 RFC](../feature/2026-09-08-user-account-issue-policy.zh.md)持有。生命周期工作流只在 `pull_request.opened` 时初始化 `Start Date`：它读取 pull request 的实时正文，保留每个解析为 Issue 的同仓库引用，把 `created_at` 转换为配置的 Project 时区下的日历日期，确保该 Issue 是 Project 条目，且仅当 Project 当前值为空时才写入日期。
 
 ### 评审回路
 

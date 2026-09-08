@@ -2,9 +2,8 @@
 name: Feature
 about: Add or intentionally change observable behavior
 title: ''
-labels: ''
 assignees: ''
-type: Feature
+labels: type/feature
 ---
 
 <!-- Title states an English action or outcome; exposed body stays within 50 units. -->

@@ -25,9 +25,41 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.13"
+      - name: Resolve deployment flavor and credentials
+        # The accountType in the checked-out config decides which credential
+        # flavor must exist; the later `||` selections are proven by this step,
+        # not silent defaults.
+        id: flavor
+        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
+        env:
+          APP_CLIENT_ID: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.HDSH_ISSUE_APP_PRIVATE_KEY }}
+          PROJECT_PAT: ${{ secrets.HDSH_PROJECT_PAT }}
+        run: |
+          set -eu
+          flavor=$(jq -r .accountType .github/issue-management/config.json)
+          case "$flavor" in
+            organization)
+              if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
+                echo "::error title=Issue policy credentials::organization flavor requires vars.HDSH_ISSUE_APP_CLIENT_ID and secrets.HDSH_ISSUE_APP_PRIVATE_KEY"
+                exit 1
+              fi
+              ;;
+            user)
+              if [ -z "$PROJECT_PAT" ]; then
+                echo "::error title=Issue policy credentials::user flavor requires secrets.HDSH_PROJECT_PAT (classic PAT, project scope)"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error title=Issue policy config::unknown accountType '$flavor' in .github/issue-management/config.json"
+              exit 1
+              ;;
+          esac
+          echo "account-type=$flavor" >> "$GITHUB_OUTPUT"
       - name: Create Project read token
         id: app-token
-        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
+        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.account-type == 'organization' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
         with:
           client-id: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
@@ -40,7 +72,7 @@ jobs:
         if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PROJECT_TOKEN: ${{ steps.app-token.outputs.token }}
+          PROJECT_TOKEN: ${{ steps.app-token.outputs.token || secrets.HDSH_PROJECT_PAT }}
         run: |
           uv sync --frozen
           uv run --no-sync hdsh policy pr --config .github/issue-management/config.json

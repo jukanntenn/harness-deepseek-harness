@@ -9,11 +9,15 @@ from dataclasses import dataclass
 TERMINAL_STATUSES = frozenset({"Done", "No action"})
 
 
+ACCOUNT_TYPES = frozenset({"organization", "user"})
+
+
 @dataclass(frozen=True)
 class PolicyConfig:
     """Repository, Project, and lifecycle settings for the policy engine."""
 
-    organization: str
+    owner: str
+    account_type: str
     repository: str
     project_number: int
     project_title: str
@@ -44,7 +48,8 @@ class PolicyConfig:
             msg = "policy configuration must be a JSON object"
             raise ValueError(msg)  # noqa: TRY004
         for field in (
-            "organization",
+            "owner",
+            "accountType",
             "repository",
             "projectTitle",
             "lifecycleActor",
@@ -55,6 +60,9 @@ class PolicyConfig:
             if not isinstance(value.get(field), str):
                 msg = f"config.{field} must be a string"
                 raise ValueError(msg)  # noqa: TRY004
+        if value["accountType"] not in ACCOUNT_TYPES:
+            msg = f"config.accountType must be one of {sorted(ACCOUNT_TYPES)}"
+            raise ValueError(msg)
         project_number = value.get("projectNumber")
         if not isinstance(project_number, int) or isinstance(project_number, bool):
             msg = "config.projectNumber must be an integer"
@@ -68,7 +76,8 @@ class PolicyConfig:
             msg = "config.allowUnassignedOwner must be a boolean"
             raise ValueError(msg)  # noqa: TRY004
         config = cls(
-            organization=value["organization"],
+            owner=value["owner"],
+            account_type=value["accountType"],
             repository=value["repository"],
             project_number=project_number,
             project_title=value["projectTitle"],

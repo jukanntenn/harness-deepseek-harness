@@ -21,6 +21,9 @@ BODY_LIMIT = 50
 _MULTI_ASSIGNEE_MIN = 2
 OWNER_LINE = re.compile(r"^Owner: @([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)$")
 TYPES = frozenset({"Idea", "Feature", "Bug", "Research", "Task"})
+#: User-account carrier for the Issue classification; organization accounts
+#: use the native Issue Type instead.
+TYPE_LABELS = {f"type/{name.lower()}": name for name in TYPES}
 PRIORITIES = ("p0", "p1", "p2", "p3")
 PR_KINDS = frozenset(
     {
@@ -483,12 +486,28 @@ def retain_issue_references(references: References, issues: dict[int, Any]) -> R
     )
 
 
+def classification_from_labels(labels: list[str]) -> str | None:
+    """Normalize the user-account ``type/*`` label carrier to its canonical name.
+
+    Args:
+        labels: Issue label names.
+
+    Returns:
+        The canonical classification, or ``None`` without exactly one known label.
+    """
+    candidates = [TYPE_LABELS[label] for label in labels if label in TYPE_LABELS]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def validate_issue(issue: dict[str, Any], config: PolicyConfig) -> list[str]:
     """Validate one Issue with its Project status.
 
     Args:
         issue: Issue snapshot with title, body, assignees, labels, type,
-            priority, status, state, and stateReason.
+            priority, status, state, and stateReason. The ``type`` value is
+            already normalized to its carrier-independent form: the native
+            Issue Type on organization accounts, the ``type/*`` label on
+            user accounts.
         config: Policy configuration.
 
     Returns:
@@ -499,10 +518,15 @@ def validate_issue(issue: dict[str, Any], config: PolicyConfig) -> list[str]:
     invalid_labels = [label for label in issue["labels"] if label.startswith("kind/")]
     if invalid_labels:
         errors.append(f"Issue must not use PR kind labels: {', '.join(invalid_labels)}")
+    type_labels = [label for label in issue["labels"] if label.startswith("type/")]
+    if config.account_type == "organization" and type_labels:
+        errors.append(
+            f"Issue must not use type/* labels on organization accounts: {', '.join(type_labels)}"
+        )
     if _TITLE_PREFIX_PATTERN.match(issue["title"]):
         errors.append("Issue title must not carry a Type, Priority, Status, area, or Owner prefix")
     if issue.get("type") not in TYPES:
-        errors.append("Type must be one of the five native English Types")
+        errors.append("Type must be one of the five English Types")
     if not status or status not in config.statuses:
         errors.append("Issue must be in the Project with a legal Status")
     priority = issue.get("priority")
@@ -544,6 +568,7 @@ def validate_pull_request(snapshot: dict[str, Any]) -> list[str]:
         label for label in labels if label.startswith("kind/") and label not in PR_KINDS
     ]
     source_labels = [label for label in labels if label.startswith("source/")]
+    type_labels = [label for label in labels if label.startswith("type/")]
     priorities = [label for label in labels if label in PRIORITIES]
     areas = [label for label in labels if label.startswith("area/")]
 
@@ -555,6 +580,8 @@ def validate_pull_request(snapshot: dict[str, Any]) -> list[str]:
         errors.append(f"PR carries unsupported kind/*: {', '.join(unknown_kinds)}")
     if source_labels:
         errors.append(f"source/* is for Issues only: {', '.join(source_labels)}")
+    if type_labels:
+        errors.append(f"type/* is for Issues only: {', '.join(type_labels)}")
     if len(priorities) > 1:
         errors.append(f"PR carries at most one p0–p3, currently {len(priorities)}")
     if not areas:

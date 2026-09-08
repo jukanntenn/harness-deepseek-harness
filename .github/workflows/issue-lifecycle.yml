@@ -27,6 +27,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: read
 
 concurrency:
   group: issue-lifecycle-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -36,10 +38,10 @@ jobs:
   lifecycle:
     name: Issue lifecycle
     # Runs on every pull_request_review event so the check reports success rather
-    # than a gray "skipped" segment. The token-creating and board-mutating steps
-    # are gated at step level (a skipped step does not gray the job): only a
+    # than a gray "skipped" segment. The flavor, token-creating, and board-mutating
+    # steps are gated at step level (a skipped step does not gray the job): only a
     # changes_requested review drives the Project board; approved/commented
-    # reviews never mint a write-capable App token.
+    # reviews never mint a write-capable token.
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy
@@ -51,9 +53,44 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.13"
+      - name: Resolve deployment flavor and credentials
+        # The accountType in the checked-out config decides which credential
+        # flavor must exist; the later `||` selections are proven by this step,
+        # not silent defaults. Organization deployments authenticate REST and
+        # GraphQL with one GitHub App token; user deployments cannot grant an
+        # App access to user-owned Projects, so REST runs on github.token and
+        # GraphQL on a classic PAT (project scope) from HDSH_PROJECT_PAT.
+        id: flavor
+        if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+        env:
+          APP_CLIENT_ID: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.HDSH_ISSUE_APP_PRIVATE_KEY }}
+          PROJECT_PAT: ${{ secrets.HDSH_PROJECT_PAT }}
+        run: |
+          set -eu
+          flavor=$(jq -r .accountType .github/issue-management/config.json)
+          case "$flavor" in
+            organization)
+              if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
+                echo "::error title=Issue lifecycle credentials::organization flavor requires vars.HDSH_ISSUE_APP_CLIENT_ID and secrets.HDSH_ISSUE_APP_PRIVATE_KEY"
+                exit 1
+              fi
+              ;;
+            user)
+              if [ -z "$PROJECT_PAT" ]; then
+                echo "::error title=Issue lifecycle credentials::user flavor requires secrets.HDSH_PROJECT_PAT (classic PAT, project scope)"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error title=Issue lifecycle config::unknown accountType '$flavor' in .github/issue-management/config.json"
+              exit 1
+              ;;
+          esac
+          echo "account-type=$flavor" >> "$GITHUB_OUTPUT"
       - name: Create project token
         id: app-token
-        if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+        if: ${{ (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.flavor.outputs.account-type == 'organization' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
         with:
           client-id: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
@@ -63,7 +100,8 @@ jobs:
       - name: Handle repository event
         if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          PROJECT_TOKEN: ${{ steps.app-token.outputs.token || secrets.HDSH_PROJECT_PAT }}
         run: |
           uv sync --frozen
           uv run --no-sync hdsh policy lifecycle --config .github/issue-management/config.json

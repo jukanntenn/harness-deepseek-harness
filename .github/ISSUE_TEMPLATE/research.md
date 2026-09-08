@@ -2,9 +2,8 @@
 name: Research
 about: Produce a conclusion, evidence, or decision
 title: ''
-labels: ''
 assignees: ''
-type: Research
+labels: type/research
 ---
 
 <!-- Title states an English action or outcome; exposed body stays within 50 units. -->

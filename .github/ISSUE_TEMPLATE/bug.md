@@ -2,9 +2,8 @@
 name: Bug
 about: Record a failure of existing intended behavior
 title: ''
-labels: ''
 assignees: ''
-type: Bug
+labels: type/bug
 ---
 
 <!-- Title states an English action or outcome; exposed body stays within 50 units. -->

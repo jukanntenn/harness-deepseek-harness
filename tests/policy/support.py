@@ -9,7 +9,8 @@ from hdsh.policy.client import GitHubPolicyClient
 from hdsh.policy.config import PolicyConfig
 
 CONFIG_JSON = {
-    "organization": "hdsh",
+    "owner": "hdsh",
+    "accountType": "organization",
     "repository": "hdsh",
     "projectNumber": 1,
     "projectTitle": "HDSH Issue Management",
@@ -22,6 +23,7 @@ CONFIG_JSON = {
 }
 
 CONFIG = PolicyConfig.from_json(json.dumps(CONFIG_JSON))
+USER_CONFIG = PolicyConfig.from_json(json.dumps({**CONFIG_JSON, "accountType": "user"}))
 
 
 def config_with(**overrides: Any) -> str:
@@ -60,10 +62,12 @@ def reviewed_pull(labels: list[str]) -> dict[str, Any]:
     }
 
 
-def make_client(transport: Any, *, project_transport: Any = None) -> GitHubPolicyClient:
+def make_client(
+    transport: Any, *, project_transport: Any = None, config: PolicyConfig | None = None
+) -> GitHubPolicyClient:
     """A client whose transport is ``transport`` (or a REST/GraphQL router)."""
     return GitHubPolicyClient(
-        CONFIG,
+        config or CONFIG,
         repository_token="repository-token",
         project_token="project-token",
         transport=transport
