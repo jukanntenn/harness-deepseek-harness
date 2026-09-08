@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/bug-fix/2026-09-08-ci-jobs-provision-the-locked-environment.md
+2026-09-08-ci-jobs-provision-the-locked-environment.md: 1ea75c00efdca6856a17d658b9167a488475d6d3
+2026-09-08-ci-jobs-provision-the-locked-environment.zh.md: 75c2638869b3427e9558cbfc877139e4e1f9074f
