@@ -2,6 +2,6 @@
 # hash of each side as of the last confirmed-consistent state. Both
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
-#   hdsh pairing record README.md
-README.md: 1ef53523834a86e3558682a128d56ae1391b26c0
-README.zh.md: 7361623b27ff92556a2c60e38131c2d6f6195e4d
+#   hdsh pairing record docs/CODE_OF_CONDUCT.md
+CODE_OF_CONDUCT.md: 5b225c8f783a860ebfe36df4014b764a30285c18
+CODE_OF_CONDUCT.zh.md: 169f4892cc8172b81a3c83f30a24fdd0b01103c3

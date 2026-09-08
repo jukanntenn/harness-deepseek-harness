@@ -1,0 +1,20 @@
+# Review routing: pull requests are authored by the developer identity (the
+# account the agent is bound to); review and approval happen as the dedicated
+# review account in the browser, and an author cannot self-approve — so the
+# wildcard routes every change to the account that actually reviews. The login
+# on the routing line is this deployment's fact (paired with lifecycleActor in
+# .github/issue-management/config.json). Owners need explicit write access.
+*  @gh2bda
+
+# Future-owner slots — uncomment as owners join; the wildcard stays default:
+# /src/hdsh/policy/       GitHub Issue/PR policy engine
+# /src/hdsh/pairing/      bilingual pairing domain
+# /src/hdsh/docs/         documentation gates
+# /src/hdsh/rfc/          RFC format and archive gates
+# /src/hdsh/worktree/     worktree-local hooks and merge driver
+# /tests/                 behavior pins mirroring src/
+# /docs/ + root *.md      bilingual documentation pairs
+# /.github/               workflows, templates, issue-management config
+# Trust boundary: /.github/workflows/ and /.github/issue-management/ mint CI
+# credentials and validate the trusted policy — keep them maintainer-owned
+# even when other areas gain owners.

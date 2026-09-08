@@ -22,6 +22,7 @@ Each fact has one home: the tier whose job it is; elsewhere, link there.
 | Subtree `AGENTS.md` (`docs/`, `.agents/rfcs/`) | Orders specific to that subtree | Repo-wide rules the root file already carries |
 | [architecture.md](architecture.md) | Ordered map: domains, the unified CLI, and where new behavior goes; read before changing `src/hdsh/` | Per-domain detail (→ the owning document), decision rationale (→ RFCs), implementation-status annotations |
 | [development.md](development.md) | Contributor setup, daily workflow, Git integrations, and a summary of CI; a bilingual pair under the [i18n contract](i18n/README.md) | Runtime/version rationale (→ RFCs), check-by-check lists that drift from the command inventory |
+| Community files ([CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md)) | GitHub-recognized community health files in `docs/`, maintained as bilingual pairs | Restated rules of the tiers that own them (→ link there instead) |
 | [cookbook/](cookbook/responding-to-pr-review-on-a-stack.md) | Step-by-step how-tos with observable verify steps | Design rationale (→ the RFC each guide links) |
 | `.agents/rfcs/**` | Decision records: the why, what was given up, required verification ([rules](../.agents/rfcs/README.md)) | Current-state contracts (→ docs), procedures (→ cookbooks) |
 | Skills (`.agents/skills/`) | Reusable workflow instructions | Product and runtime contracts (→ docs or source) |
