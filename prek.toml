@@ -25,7 +25,7 @@ hooks = [
     { id = "hdsh-pairing-verify-cached", name = "translation pairing (staged records)", entry = "uv run --no-sync hdsh pairing verify --cached", language = "system", files = '\.i18n\.yaml$', exclude = '\.agents/rfcs/archived/' },
     { id = "hdsh-ruff-lint", name = "ruff lint (staged)", entry = "uv run --no-sync ruff check --fix", language = "system", files = '\.py$' },
     { id = "hdsh-ruff-format", name = "ruff format (staged)", entry = "uv run --no-sync ruff format", language = "system", files = '\.py$' },
-    { id = "hdsh-whitespace", name = "whitespace (staged)", entry = "git diff --cached --check", language = "system", pass_filenames = false, always_run = true },
+    { id = "hdsh-whitespace", name = "whitespace (staged)", entry = "git --no-pager diff --cached --check", language = "system", pass_filenames = false, always_run = true },
     { id = "hdsh-rfc-verify", name = "rfc format", entry = "uv run --no-sync hdsh rfc verify", language = "system", pass_filenames = false, always_run = true },
     { id = "hdsh-rfc-archive", name = "frozen rfc archive", entry = "uv run --no-sync hdsh rfc archive", language = "system", files = '\.agents/rfcs/archived/', pass_filenames = false, always_run = true },
     { id = "hdsh-docs-wrap", name = "markdown hard-wrap", entry = "uv run --no-sync hdsh docs wrap", language = "system", files = '\.md$', pass_filenames = false },
