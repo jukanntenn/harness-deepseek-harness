@@ -35,8 +35,7 @@ class TestRecordPaths:
 
 
 class TestRecordParse:
-    def setup_method(self) -> None:
-        self.paths = pair_paths("docs/guide.md")
+    paths: PairPaths = pair_paths("docs/guide.md")
 
     def test_parses_canonical_record(self) -> None:
         record = parse_record(

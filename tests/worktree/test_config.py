@@ -12,7 +12,7 @@ from hdsh.worktree import config as worktree_config
 from hdsh.worktree import install as worktree_install
 from hdsh.worktree.git import WorktreeError, nul_values, run_git, strip_git_line_terminator
 from hdsh.worktree.install import install
-from tests.helpers import Repo, git
+from tests.helpers import Repo, completed_run, git
 
 
 def git_dir(repo: Repo) -> Path:
@@ -26,8 +26,12 @@ def common_config(repo: Repo) -> Path:
 @pytest.fixture(autouse=True)
 def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the probe and prek invocation; config guards are under test."""
-    monkeypatch.setattr(worktree_install, "run_prek", lambda root: None)
-    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", lambda root: None)
+
+    def skipped(root: str) -> None:
+        return None
+
+    monkeypatch.setattr(worktree_install, "run_prek", skipped)
+    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", skipped)
 
 
 class TestGitHelpers:
@@ -41,7 +45,7 @@ class TestGitHelpers:
 
     def test_git_failure_without_stderr_names_status(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["git"], 3, "", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="exit status 3"):
             run_git(".", ["--version"])
 
@@ -68,19 +72,19 @@ class TestGitHelpers:
 
     def test_included_entries_odd_fields_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["git"], 0, "one\0", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="invalid file entries"):
             worktree_config.included_config_entries(".", "/cfg", "k")
 
     def test_effective_entry_invalid_shape_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["git"], 0, "a\0b\0", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="invalid scoped value"):
             worktree_config.effective_config_entry(".", "k")
 
     def test_matching_entries_odd_fields_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["git"], 0, "one\0", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="invalid matching file entries"):
             worktree_config.direct_config_matching_entries(".", "/cfg", "^k")
 
@@ -88,7 +92,7 @@ class TestGitHelpers:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         completed = subprocess.CompletedProcess(["git"], 0, "file:x\0novalue\0", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="invalid name and value"):
             worktree_config.direct_config_matching_entries(".", "/cfg", "^k")
 
@@ -226,7 +230,7 @@ class TestEnvironmentScrub:
 
     def test_run_prek_failure_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["prek"], 1, "", "boom\n")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="prek install --overwrite failed: boom"):
             worktree_config.run_prek("/repo")
 
@@ -234,7 +238,7 @@ class TestEnvironmentScrub:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         completed = subprocess.CompletedProcess(["prek"], 7, "", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="failed: exit status 7"):
             worktree_config.run_prek("/repo")
 
@@ -248,7 +252,7 @@ class TestEnvironmentScrub:
 
     def test_probe_failure_raises_with_stderr(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["uv"], 1, "", "no runtime\n")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="--probe failed: no runtime"):
             worktree_config.probe_pairing_merge_driver("/repo")
 
@@ -256,7 +260,7 @@ class TestEnvironmentScrub:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         completed = subprocess.CompletedProcess(["uv"], 3, "", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         with pytest.raises(WorktreeError, match="--probe failed: exit status 3"):
             worktree_config.probe_pairing_merge_driver("/repo")
 
@@ -270,7 +274,7 @@ class TestEnvironmentScrub:
 
     def test_probe_success_returns(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["uv"], 0, "", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         worktree_config.probe_pairing_merge_driver("/repo")
 
 
@@ -278,42 +282,46 @@ class TestWorktreeConfigMigration:
     def test_rejects_unsupported_repository_format(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            worktree_config,
-            "direct_config_values",
-            lambda root, config_path, key: ["abc"] if key == "core.repositoryFormatVersion" else [],
-        )
+        def fake_values(root: str, config_path: str, key: str) -> list[str]:
+            if key == "core.repositoryFormatVersion":
+                return ["abc"]
+            return []
+
+        monkeypatch.setattr(worktree_config, "direct_config_values", fake_values)
         with pytest.raises(WorktreeError, match="repositoryFormatVersion"):
             install(str(repo.root))
 
     def test_rejects_missing_repository_format(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            worktree_config, "direct_config_values", lambda root, config_path, key: []
-        )
+        def fake_values(root: str, config_path: str, key: str) -> list[str]:
+            return []
+
+        monkeypatch.setattr(worktree_config, "direct_config_values", fake_values)
         with pytest.raises(WorktreeError, match="repositoryFormatVersion: None"):
             install(str(repo.root))
 
     def test_rejects_negative_repository_format(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            worktree_config,
-            "direct_config_values",
-            lambda root, config_path, key: ["-1"] if key == "core.repositoryFormatVersion" else [],
-        )
+        def fake_values(root: str, config_path: str, key: str) -> list[str]:
+            if key == "core.repositoryFormatVersion":
+                return ["-1"]
+            return []
+
+        monkeypatch.setattr(worktree_config, "direct_config_values", fake_values)
         with pytest.raises(WorktreeError, match="repositoryFormatVersion: '-1'"):
             install(str(repo.root))
 
     def test_rejects_fractional_repository_format(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            worktree_config,
-            "direct_config_values",
-            lambda root, config_path, key: ["1.0"] if key == "core.repositoryFormatVersion" else [],
-        )
+        def fake_values(root: str, config_path: str, key: str) -> list[str]:
+            if key == "core.repositoryFormatVersion":
+                return ["1.0"]
+            return []
+
+        monkeypatch.setattr(worktree_config, "direct_config_values", fake_values)
         with pytest.raises(WorktreeError, match="repositoryFormatVersion: '1.0'"):
             install(str(repo.root))
 
@@ -481,5 +489,5 @@ class TestConfigEdges:
 
     def test_run_prek_success_returns(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["prek"], 0, "", "")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         worktree_config.run_prek("/repo")

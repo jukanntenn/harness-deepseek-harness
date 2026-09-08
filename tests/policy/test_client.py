@@ -13,6 +13,11 @@ from tests.helpers import project_payload
 from tests.policy.support import CONFIG, config_with, make_client, routing_transport
 
 
+def _empty_rest(*args: object, **kwargs: object) -> tuple[int, str]:
+    """REST transport double answering an empty JSON object."""
+    return 200, "{}"
+
+
 def _client(transport: Any) -> GitHubPolicyClient:
     return GitHubPolicyClient(
         PolicyConfig.from_json(config_with()),
@@ -206,7 +211,7 @@ class TestClient:
                 {"data": {"updateProjectV2ItemFieldValue": {"projectV2Item": {"id": "item-id"}}}}
             )
 
-        client = make_client(routing_transport(lambda *a, **k: (200, "{}"), graphql))  # type: ignore[misc]
+        client = make_client(routing_transport(_empty_rest, graphql))  # type: ignore[misc]
         client.initialize_issue_start_date(42, "2026-08-28")
         assert len(requests) == 2
         assert "ProjectV2ItemFieldDateValue" in requests[0]["query"]
@@ -228,7 +233,7 @@ class TestClient:
             assert "query(" in json.loads(body)["query"]
             return 200, json.dumps({"data": project_graphql_data(start_date="2026-08-01")})
 
-        client = make_client(routing_transport(lambda *a, **k: (200, "{}"), graphql))  # type: ignore[misc]
+        client = make_client(routing_transport(_empty_rest, graphql))  # type: ignore[misc]
         client.initialize_issue_start_date(42, "2026-08-28")
 
     def test_initialize_start_date_adds_missing_item(self) -> None:
@@ -257,7 +262,7 @@ class TestClient:
                 }
             )
 
-        client = make_client(routing_transport(lambda *a, **k: (200, "{}"), graphql))  # type: ignore[misc]
+        client = make_client(routing_transport(_empty_rest, graphql))  # type: ignore[misc]
         client.initialize_issue_start_date(42, "2026-08-28")
         assert requests[1]["variables"] == {"projectId": "project-id", "contentId": "issue-id"}
         assert requests[2]["variables"]["itemId"] == "new-item-id"
@@ -284,7 +289,7 @@ class TestClient:
             assert "query(" in json.loads(body)["query"]
             return 200, json.dumps({"data": project_graphql_data(**kwargs)})
 
-        client = make_client(routing_transport(lambda *a, **k: (200, "{}"), graphql))  # type: ignore[misc]
+        client = make_client(routing_transport(_empty_rest, graphql))  # type: ignore[misc]
         with pytest.raises(RuntimeError, match=pattern):
             client.initialize_issue_start_date(42, "2026-08-28")
 
@@ -791,10 +796,10 @@ class TestClientBranches:
         def urllib_error(code: int, body: bytes) -> Exception:
             return urllib.error.HTTPError("url", code, "x", cast("Any", None), BytesIO(body))
 
-        monkeypatch.setattr(
-            "urllib.request.urlopen",
-            lambda request: (_ for _ in ()).throw(urllib_error(404, b'{"m":1}')),
-        )
+        def raising_urlopen(request: object) -> object:
+            raise urllib_error(404, b'{"m":1}')
+
+        monkeypatch.setattr("urllib.request.urlopen", raising_urlopen)
         client = GitHubPolicyClient(
             PolicyConfig.from_json(UTC_CONFIG),
             repository_token="r",
@@ -805,7 +810,7 @@ class TestClientBranches:
 
     def test_default_transport_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class FakeResponse:
-            status = 200
+            status: int = 200
 
             def read(self) -> bytes:
                 return b'{"ok": true}'
@@ -816,7 +821,10 @@ class TestClientBranches:
             def __exit__(self, *args: object) -> None:
                 return None
 
-        monkeypatch.setattr("urllib.request.urlopen", lambda request: FakeResponse())
+        def fake_urlopen(request: object) -> FakeResponse:
+            return FakeResponse()
+
+        monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
         client = GitHubPolicyClient(PolicyConfig.from_json(UTC_CONFIG), "r", "p")
         assert client._api("/x") == {"ok": True}
 
@@ -886,7 +894,7 @@ class TestClientBranches:
         assert context["statusActor"] == "hdsh-issue-management"
 
     def test_initialize_start_dates_only_on_opened(self) -> None:
-        client = _utc_client(lambda *a, **k: (200, "{}"))
+        client = _utc_client(_empty_rest)
         writes: list[tuple[int, str]] = []
 
         def writer(number: int, date: str) -> None:
@@ -1046,11 +1054,10 @@ class TestClientBranches:
                 }
             )
 
-        client = _client(
-            routing_transport(
-                transport, lambda *a, **k: (200, json.dumps({"data": project_payload()}))
-            )
-        )
+        def project_rest(*args: object, **kwargs: object) -> tuple[int, str]:
+            return 200, json.dumps({"data": project_payload()})
+
+        client = _client(routing_transport(transport, project_rest))
         assert client.audit_issue(2) == []
 
     def test_resolving_snapshot_skips_pull_request_references(self) -> None:
@@ -1103,7 +1110,7 @@ class _LifecycleClient:
     def __init__(self) -> None:
         self.status_mutations: list[str] = []
         self.dates_written: list[int] = []
-        self.config = PolicyConfig.from_json(UTC_CONFIG)
+        self.config: PolicyConfig = PolicyConfig.from_json(UTC_CONFIG)
 
     def seen_status(self, name: str) -> bool:
         return name in self.status_mutations
@@ -1136,7 +1143,7 @@ class _LifecycleClient:
         self.dates_written.extend(pull["references"]["all"])
 
     def run_lifecycle(self, event_name: str, event: dict[str, Any]) -> None:
-        GitHubPolicyClient.run_lifecycle(self, event_name, event)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        GitHubPolicyClient.run_lifecycle(self, event_name, event)  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
 
     def run_pull_request_check(self, event: dict[str, Any]) -> None:
         print("Issue policy passed.")

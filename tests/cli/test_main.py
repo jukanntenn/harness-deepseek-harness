@@ -81,14 +81,22 @@ class TestDispatch:
         from hdsh.docs import budgets
 
         seen: list[argparse.Namespace] = []
-        monkeypatch.setattr(budgets, "main", lambda args: seen.append(args) or 0)
+
+        def record_then_zero(args: argparse.Namespace) -> int:
+            seen.append(args)
+            return 0
+
+        monkeypatch.setattr(budgets, "main", record_then_zero)
         assert main(["docs", "budgets", "--list"]) == 0
         assert seen[0].list is True
 
     def test_handler_exit_code_is_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import hdsh.scope as scope_module
 
-        monkeypatch.setattr(scope_module, "main", lambda args: 7)
+        def exit_seven(args: argparse.Namespace) -> int:
+            return 7
+
+        monkeypatch.setattr(scope_module, "main", exit_seven)
         assert main(["scope", "--base", "main"]) == 7
 
 
@@ -99,7 +107,11 @@ def test_python_m_hdsh_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
     import hdsh.docs.budgets
 
     monkeypatch.setattr(sys, "argv", ["hdsh", "docs", "budgets", "--list"])
-    monkeypatch.setattr(hdsh.docs.budgets, "main", lambda args: 0)
+
+    def exit_zero(args: argparse.Namespace) -> int:
+        return 0
+
+    monkeypatch.setattr(hdsh.docs.budgets, "main", exit_zero)
     with pytest.raises(SystemExit) as excinfo:
         runpy.run_module("hdsh", run_name="__main__", alter_sys=True)
     assert excinfo.value.code == 0

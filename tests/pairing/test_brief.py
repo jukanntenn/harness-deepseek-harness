@@ -546,7 +546,7 @@ class TestBriefCommand:
         _write_terminology(repo)
         write_pair(repo, "docs/guide.md")
         _record(repo, "docs/guide.md")
-        code, out, err = run_brief(repo)
+        code, out, _err = run_brief(repo)
         assert code == 0
         assert any("nothing to brief" in line for line in out)
 
@@ -642,7 +642,7 @@ class TestBriefCommand:
         repo.write("docs/guide.zh.md", zh)
         _record(repo, "docs/guide.md")
         repo.write("docs/guide.md", en.replace("ls\n", "ls -la\n"))
-        code, out, err = run_brief(repo, "--apply", "docs/guide.md")
+        code, _out, err = run_brief(repo, "--apply", "docs/guide.md")
         assert code == 0, err
         counterpart = (repo.root / "docs/guide.zh.md").read_text()
         assert "```sh\nls -la\n```" in counterpart
@@ -711,7 +711,7 @@ class TestBriefCommand:
         repo.write("docs/guide.zh.md", zh)
         _record(repo, "docs/guide.md")
         repo.write("docs/guide.zh.md", zh.replace("ls\n", "ls -la\n"))
-        code, out, err = run_brief(repo, "--apply", "docs/guide.zh.md")
+        code, _out, err = run_brief(repo, "--apply", "docs/guide.zh.md")
         assert code == 0, err
         assert "```sh\nls -la\n```" in (repo.root / "docs/guide.md").read_text()
         assert any("applied code-fence splice to docs/guide.md" in line for line in err)
@@ -721,7 +721,7 @@ class TestBriefCommand:
         write_pair(repo, "docs/guide.md")
         _record(repo, "docs/guide.md")
         repo.write("docs/broken.i18n.yaml", "broken.md: " + "0" * 40 + "\n")
-        code, out, err = run_brief(repo)
+        code, out, _err = run_brief(repo)
         assert code == 0
         assert any("nothing to brief" in line for line in out)
 
@@ -765,22 +765,26 @@ class TestMainEdges:
         def raising_run(*args: object, **kwargs: object) -> None:
             raise OSError("no git")
 
-        monkeypatch.setattr(brief_module.subprocess, "run", raising_run)
+        monkeypatch.setattr(subprocess, "run", raising_run)
         assert brief_module.main(parse_brief()) == 2
 
     def test_git_failure_exits_two(self, repo: Repo, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["git"], 128, b"", b"fatal")
-        monkeypatch.setattr(
-            brief_module.subprocess,
-            "run",
-            lambda *args, **kwargs: completed,
-        )
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+            return completed
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
         assert brief_module.main(parse_brief()) == 2
 
     def test_diff_subprocess_failure_raises(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         completed = subprocess.CompletedProcess(["git"], 128, b"", b"fatal: not a repository")
-        monkeypatch.setattr(brief_module.subprocess, "run", lambda *args, **kwargs: completed)
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+            return completed
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
         with pytest.raises(GitError, match="diff --no-index"):
             brief_module._diff_texts(str(repo.root), "a\n", "b\n")

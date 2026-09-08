@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from hdsh.pairing import links as pairing_links
@@ -877,15 +879,17 @@ class TestNormalizeSplicingEdges:
 
     def test_unlocatable_definition_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         markdown = "See [x][o].\n\n[o]: other.md\n"
-        monkeypatch.setattr(
-            pairing_links,
-            "_scan_definitions",
-            lambda markdown, references: {
+
+        def single_scan(
+            markdown: str, references: dict[str, dict[str, Any]]
+        ) -> dict[str, pairing_links._DefinitionScan]:
+            return {
                 "O": pairing_links._DefinitionScan(
                     authored="other.md", href="other.md", line=2, span=None
                 )
-            },
-        )
+            }
+
+        monkeypatch.setattr(pairing_links, "_scan_definitions", single_scan)
         assert (
             pairing_links.normalize_translation_markdown_links(
                 markdown, self._pair_context(markdown, "docs/guide.md")

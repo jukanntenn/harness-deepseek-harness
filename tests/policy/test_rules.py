@@ -185,7 +185,7 @@ class TestValidateIssue:
 
     def test_open_statuses_require_open_state(self) -> None:
         errors = validate_issue({**LEGAL_ISSUE, "state": "closed"}, CONFIG)
-        assert errors and any("must correspond to an open Issue" for e in errors)
+        assert errors and any("must correspond to an open Issue" in e for e in errors)
 
 
 class TestReferences:

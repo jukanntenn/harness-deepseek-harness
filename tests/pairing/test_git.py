@@ -179,10 +179,12 @@ class TestGitOpsEdges:
             run_git(".", ["--version"], "probe")
 
     def test_store_git_blob_mismatch(self, repo: Repo, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "hdsh.pairing.git.run_git",
-            lambda root, args, operation, *, input_bytes=None: b"0" * 40,
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"0" * 40
+
+        monkeypatch.setattr("hdsh.pairing.git.run_git", fake_run_git)
         with pytest.raises(GitError, match="unexpected object ID"):
             store_git_blob(str(repo.root), b"data\n")
 
@@ -198,43 +200,53 @@ class TestGitOpsEdges:
     def test_read_git_index_blob_meta_separator_missing(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "hdsh.pairing.git.run_git",
-            lambda root, args, operation, *, input_bytes=None: b"no-tabs-here\0",
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"no-tabs-here\0"
+
+        monkeypatch.setattr("hdsh.pairing.git.run_git", fake_run_git)
         with pytest.raises(GitError, match="invalid index entry"):
             read_git_index_blob(str(repo.root), "docs/x.md")
 
     def test_git_ops_malformed_stage_entry(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "hdsh.pairing.git.run_git",
-            lambda root, args, operation, *, input_bytes=None: b"bad-entry\0",
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"bad-entry\0"
+
+        monkeypatch.setattr("hdsh.pairing.git.run_git", fake_run_git)
         with pytest.raises(GitError, match="malformed entry"):
             git_index_paths("/repo")
 
     def test_git_ops_stage_wrong_stage_number(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "hdsh.pairing.git.run_git",
-            lambda root, args, operation, *, input_bytes=None: b"100644 abc 2\tx.md\0",
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"100644 abc 2\tx.md\0"
+
+        monkeypatch.setattr("hdsh.pairing.git.run_git", fake_run_git)
         with pytest.raises(GitError, match="unmerged or has an invalid index entry"):
             read_git_index_blob("/repo", "x.md")
 
     def test_git_ops_malformed_stage_metadata(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "hdsh.pairing.git.run_git",
-            lambda root, args, operation, *, input_bytes=None: b"onefield\tx.md\0",
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"onefield\tx.md\0"
+
+        monkeypatch.setattr("hdsh.pairing.git.run_git", fake_run_git)
         with pytest.raises(GitError, match="malformed entry"):
             git_index_paths("/repo")
 
     def test_git_ops_index_blob_malformed_metadata(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "hdsh.pairing.git.run_git",
-            lambda root, args, operation, *, input_bytes=None: b"nometadata\tx.md\0",
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"nometadata\tx.md\0"
+
+        monkeypatch.setattr("hdsh.pairing.git.run_git", fake_run_git)
         with pytest.raises(GitError, match="invalid index entry"):
             read_git_index_blob("/repo", "x.md")

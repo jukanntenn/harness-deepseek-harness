@@ -7,7 +7,8 @@ import subprocess
 
 import pytest
 
-from hdsh.docs.corpus import CorpusScope, discover_corpus_files, find_repository_root
+from hdsh.docs.config import CorpusScope
+from hdsh.docs.corpus import discover_corpus_files, find_repository_root
 from tests.helpers import Repo
 
 

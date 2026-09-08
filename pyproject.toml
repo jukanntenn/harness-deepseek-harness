@@ -97,6 +97,9 @@ convention = "google"
 
 [tool.basedpyright]
 typeCheckingMode = "all"
+# Warnings block the CLI. Explicit so a future basedpyright default change
+# cannot silently weaken the gate.
+failOnWarnings = true
 venvPath = "."
 venv = ".venv"
 pythonPlatform = "All"
@@ -114,26 +117,19 @@ reportUnusedCallResult = false
 reportUnusedParameter = false
 reportImplicitStringConcatenation = false
 
-# Test-only noise sources stay inside the tests environment below: tests
-# exercise private contracts and hand-rolled transport doubles.
+# Test-only white-box access: tests exercise private contracts and patch
+# module internals directly, so the private-access family carries no signal
+# inside the tests environment. Every other diagnostic keeps its strict
+# default there, and warnings still fail the CLI via the explicit
+# failOnWarnings flag.
 [[tool.basedpyright.executionEnvironments]]
 root = "src"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
 extraPaths = ["."]
-reportPrivateUsage = "warning"
-reportPrivateLocalImportUsage = "warning"
-reportUninitializedInstanceVariable = "warning"
-reportImplicitOverride = "warning"
-reportUnusedVariable = "warning"
-reportUnusedFunction = "warning"
-reportUnknownLambdaType = "warning"
-reportArgumentType = "warning"
-reportImplicitRelativeImport = "warning"
-reportIndexIssue = "warning"
-reportAttributeAccessIssue = "warning"
-reportUnannotatedClassAttribute = "warning"
+reportPrivateUsage = "none"
+reportPrivateLocalImportUsage = "none"
 
 [tool.ty.src]
 include = ["src", "tests"]

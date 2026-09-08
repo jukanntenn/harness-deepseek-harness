@@ -12,14 +12,18 @@ import pytest
 from hdsh.worktree import install as worktree_install
 from hdsh.worktree.git import WorktreeError
 from hdsh.worktree.install import install
-from tests.helpers import Repo, git, parse_command
+from tests.helpers import Repo, completed_run, git, parse_command
 
 
 @pytest.fixture(autouse=True)
 def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the probe and prek invocation; the installer's contract is under test."""
-    monkeypatch.setattr(worktree_install, "run_prek", lambda root: None)
-    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", lambda root: None)
+
+    def skipped(root: str) -> None:
+        return None
+
+    monkeypatch.setattr(worktree_install, "run_prek", skipped)
+    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", skipped)
 
 
 def hooks_path_of(repo: Repo) -> str:
@@ -308,20 +312,22 @@ class TestInstallLock:
 
 class TestGitVersion:
     def test_old_git_is_refused(self, repo: Repo, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            worktree_install,
-            "run_git",
-            lambda root, args, **kwargs: _fake_git_version("git version 2.25.0"),
-        )
+        def fake_git_run(
+            root: str, args: list[str], *, allow_status: tuple[int, ...] = ()
+        ) -> object:
+            return _fake_git_version("git version 2.25.0")
+
+        monkeypatch.setattr(worktree_install, "run_git", fake_git_run)
         with pytest.raises(WorktreeError, match="Git 2.26"):
             install(str(repo.root))
 
     def test_unparsable_git_is_refused(self, repo: Repo, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            worktree_install,
-            "run_git",
-            lambda root, args, **kwargs: _fake_git_version("not a version string"),
-        )
+        def fake_git_run(
+            root: str, args: list[str], *, allow_status: tuple[int, ...] = ()
+        ) -> object:
+            return _fake_git_version("not a version string")
+
+        monkeypatch.setattr(worktree_install, "run_git", fake_git_run)
         with pytest.raises(WorktreeError, match="cannot determine Git version"):
             install(str(repo.root))
 
@@ -343,7 +349,7 @@ class TestMain:
         monkeypatch.delenv("CI", raising=False)
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         completed = subprocess.CompletedProcess(["git"], 128, "", "fatal")
-        monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: completed)
+        monkeypatch.setattr(subprocess, "run", completed_run(completed))
         assert self.install_cli() == 0
 
     def test_rev_parse_oserror_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -359,14 +365,16 @@ class TestMain:
     def test_install_error_fails(self, repo: Repo, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("CI", raising=False)
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-        monkeypatch.setattr(
-            subprocess,
-            "run",
-            lambda args, **kwargs: subprocess.CompletedProcess(args, 0, f"{repo.root}\n", ""),
-        )
-        monkeypatch.setattr(
-            worktree_install, "install", lambda root: (_ for _ in ()).throw(WorktreeError("boom"))
-        )
+
+        def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess[str](args, 0, f"{repo.root}\n", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        def raising_install(root: str) -> None:
+            raise WorktreeError("boom")
+
+        monkeypatch.setattr(worktree_install, "install", raising_install)
         assert self.install_cli() == 1
 
     def test_main_preserves_trailing_space_in_root(
@@ -379,11 +387,10 @@ class TestMain:
         def recording_install(root: str) -> None:
             seen.append(root)
 
-        monkeypatch.setattr(
-            subprocess,
-            "run",
-            lambda args, **kwargs: subprocess.CompletedProcess(args, 0, f"{repo.root} \n", ""),
-        )
+        def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess[str](args, 0, f"{repo.root} \n", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(worktree_install, "install", recording_install)
         assert self.install_cli() == 0
         assert seen == [f"{repo.root} "]
@@ -395,8 +402,8 @@ class TestMain:
 
 def _fake_git_version(version: str) -> object:
     class Result:
-        returncode = 0
-        stdout = version
+        returncode: int = 0
+        stdout: str = version
 
     return Result()
 
@@ -445,7 +452,11 @@ def test_main_returns_zero_after_successful_install(
 ) -> None:
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.setattr(worktree_install, "run_prek", lambda root: None)
+
+    def skipped(root: str) -> None:
+        return None
+
+    monkeypatch.setattr(worktree_install, "run_prek", skipped)
     monkeypatch.chdir(repo.root)
     parsed = parse_command(worktree_install.register, ["install"])
     assert worktree_install.main(parsed) == 0

@@ -494,7 +494,13 @@ class TestMergeGuardBranches:
         real = blob_hash(content)
         wrong = "0" * 40 if real[0] != "0" else "1" * 40
         monkey = pytest.MonkeyPatch()
-        monkey.setattr(merge_module, "run_git", lambda root, args, op, *, input_bytes=None: content)
+
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return content
+
+        monkey.setattr(merge_module, "run_git", fake_run_git)
         try:
             with pytest.raises(ValueError, match="not its SHA-1 git blob hash"):
                 merge_module._read_git_blob(str(repo.root), wrong, "owner")
@@ -505,7 +511,7 @@ class TestMergeGuardBranches:
         def raising_run(*args: object, **kwargs: object) -> None:
             raise OSError("boom")
 
-        monkeypatch.setattr(merge_module.subprocess, "run", raising_run)
+        monkeypatch.setattr(subprocess, "run", raising_run)
         with pytest.raises(GitError, match="reading merge.default failed"):
             merge_module._read_merge_default(str(repo.root))
 
@@ -513,7 +519,11 @@ class TestMergeGuardBranches:
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         completed = subprocess.CompletedProcess(["git"], 128, b"", b"fatal")
-        monkeypatch.setattr(merge_module.subprocess, "run", lambda a, **k: completed)
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+            return completed
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
         with pytest.raises(GitError, match="status 128"):
             merge_module._read_merge_default(str(repo.root))
 
@@ -521,7 +531,7 @@ class TestMergeGuardBranches:
         def raising_run(*args: object, **kwargs: object) -> None:
             raise OSError("no git")
 
-        monkeypatch.setattr(merge_module.subprocess, "run", raising_run)
+        monkeypatch.setattr(subprocess, "run", raising_run)
         with pytest.raises(GitError, match="merging x failed"):
             merge_module._run_text_merge(str(repo.root), "x", b"a\n", b"b\n", b"c\n")
 
@@ -683,33 +693,30 @@ class TestMergeGuardBranches:
     def test_unmerged_listing_malformed_entry(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            merge_module, "run_git", lambda root, args, op, *, input_bytes=None: b"garbage entry\0"
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"garbage entry\0"
+
+        monkeypatch.setattr(merge_module, "run_git", fake_run_git)
         with pytest.raises(GitError, match="malformed unmerged entry"):
             resolve_conflicts(str(repo.root), lambda p: True, generated=(), public_blob_root="")
 
     def test_unmerged_listing_skips_non_sidecars(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            merge_module,
-            "run_git",
-            lambda root, args, op, *, input_bytes=None: b"100644 abcdef 1\tREADME.md\0",
-        )
+        def fake_run_git(
+            root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
+        ) -> bytes:
+            return b"100644 abcdef 1\tREADME.md\0"
+
+        monkeypatch.setattr(merge_module, "run_git", fake_run_git)
         assert (
             resolve_conflicts(str(repo.root), lambda p: True, generated=(), public_blob_root="")
             == []
         )
 
     def test_assert_unedited_accepts_text_merge_result(self, repo: Repo) -> None:
-        from hdsh.pairing.records import PairingRecord, PairPaths, render_record
-
-        paths = PairPaths(ANCHOR, "docs/guide.zh.md", META)
-
-        def record(first: str, second: str) -> str:
-            return render_record(paths, PairingRecord(source_hash=first, zh_hash=second))
-
         # The resolver only text-merges and compares here, so synthetic texts
         # with separable changes exercise the clean-merge acceptance path.
         ancestor = "header\nguide.md: one\nspacer\nguide.zh.md: two\n"

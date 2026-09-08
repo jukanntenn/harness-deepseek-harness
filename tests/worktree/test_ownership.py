@@ -45,8 +45,16 @@ def lock_path_of(repo: Repo) -> Path:
 @pytest.fixture(autouse=True)
 def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the probe and prek invocation; ownership is under test."""
-    monkeypatch.setattr(worktree_install, "run_prek", lambda root: None)
-    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", lambda root: None)
+
+    def skipped(root: str) -> None:
+        return None
+
+    monkeypatch.setattr(worktree_install, "run_prek", skipped)
+    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", skipped)
+
+
+def _no_sleep(seconds: float) -> None:
+    """A time.sleep double that never waits."""
 
 
 def _write_owned_hooks(hooks: Path, *, external_link: Path | None = None) -> None:
@@ -222,7 +230,7 @@ class TestAcquire:
 
         # A shortened wall-clock deadline and a no-op sleep converge immediately.
         monkeypatch.setattr(ownership_module, "INSTALL_LOCK_TIMEOUT_SECONDS", 0.2)
-        monkeypatch.setattr(time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(time, "sleep", _no_sleep)
         with pytest.raises(WorktreeError, match="timed out waiting"):
             install(str(repo.root))
 
@@ -271,7 +279,7 @@ class TestAcquire:
             return real_monotonic() + 6.0 * calls["n"]
 
         monkeypatch.setattr(time, "monotonic", advancing_monotonic)
-        monkeypatch.setattr(time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(time, "sleep", _no_sleep)
         with pytest.raises(WorktreeError, match="invalid installer lock"):
             install(str(repo.root))
 
@@ -283,9 +291,13 @@ class TestAcquire:
         lock_path_of(repo).write_text(
             f"{os.getpid()} 12345678-1234-1234-1234-123456789012\n", encoding="utf-8"
         )
-        monkeypatch.setattr(os, "kill", lambda pid, sig: (_ for _ in ()).throw(PermissionError()))
+
+        def permission_denied(pid: int, sig: int) -> None:
+            raise PermissionError
+
+        monkeypatch.setattr(os, "kill", permission_denied)
         monkeypatch.setattr(ownership_module, "INSTALL_LOCK_TIMEOUT_SECONDS", 0.2)
-        monkeypatch.setattr(time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(time, "sleep", _no_sleep)
         with pytest.raises(WorktreeError, match="timed out waiting"):
             install(str(repo.root))
 

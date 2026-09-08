@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -352,6 +353,10 @@ def test_request_dataclass_defaults() -> None:
 class _UnreadableRepository:
     """Content-plane stub whose files exist but cannot be read."""
 
+    inner: PairingRepository
+    root: str
+    index_mode: bool
+
     def __init__(self, inner: PairingRepository) -> None:
         self.inner = inner
         self.root = inner.root
@@ -402,7 +407,11 @@ class TestVerifyPlanes:
             return None
 
         monkeypatch.setattr(PairingRepository, "read_repository_file", selective_read)
-        monkeypatch.setattr(PairingRepository, "repository_file_exists", lambda self, file: True)
+
+        def always_exists(self: PairingRepository, file: str) -> bool:
+            return True
+
+        monkeypatch.setattr(PairingRepository, "repository_file_exists", always_exists)
         err: list[str] = []
         code = run_gate(
             record_request(parse("record", ANCHOR)),
@@ -461,7 +470,7 @@ class TestVerifyPlanes:
         repo.write("docs/guide.zh.md", zh)
         assert run_gate(record_request(parse("record", ANCHOR)), str(repo.root)) == 0
         assert run_gate(record_request(parse("record", "docs/other.md")), str(repo.root)) == 0
-        code, out, err = run(repo, "verify", ANCHOR)
+        code, _out, err = run(repo, "verify", ANCHOR)
         assert code == 0, err
 
     def test_generated_region_switcher_shaped_lines_normalize(self, repo: Repo) -> None:
@@ -478,7 +487,7 @@ class TestVerifyPlanes:
         repo.write(ANCHOR, source)
         repo.write("docs/guide.zh.md", zh)
         assert run_gate(record_request(parse("record", ANCHOR)), str(repo.root)) == 0
-        code, out, err = run(repo, "verify", ANCHOR)
+        code, _out, err = run(repo, "verify", ANCHOR)
         assert code == 1
         assert any("wrong locale" in line for line in err)
         assert not any("generated regions differ" in line for line in err)
@@ -504,19 +513,19 @@ class TestVerifyPlanes:
         write_pair(repo, ANCHOR)
         gate_record(repo)
         repo.add_all()
-        code, out, _ = _run(repo, "verify", "--cached", "docs/guide.md", "docs/absent.md")
+        code, _out, _ = _run(repo, "verify", "--cached", "docs/guide.md", "docs/absent.md")
         assert code == 0
 
     def test_corpus_write_skips_unreadable(self, repo: Repo) -> None:
         repo.write("docs/lonely.md", en_pair("lonely.zh.md"))
-        code, out, _ = _run(repo, "record", "--all")
+        code, _out, _ = _run(repo, "record", "--all")
         assert code == 0
 
     def test_main_oserror(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def raising_run(*args: object, **kwargs: object) -> None:
             raise OSError("boom")
 
-        monkeypatch.setattr(tp_verify_module.subprocess, "run", raising_run)
+        monkeypatch.setattr(subprocess, "run", raising_run)
         with pytest.raises(SystemExit) as excinfo:
             tp_verify_module.verify_main(parse("verify"))
         assert excinfo.value.code == 2
@@ -530,7 +539,7 @@ class TestVerifyPlanes:
 
     def test_gate_write_pairs_scope_skips_unrecordable(self, repo: Repo) -> None:
         repo.write("docs/lonely.md", en_pair("lonely.zh.md"))
-        code, out, _ = _run(repo, "record", "docs/lonely.md")
+        code, _out, _ = _run(repo, "record", "docs/lonely.md")
         assert code == 2
 
     def test_gate_discovery_skips_out_of_scope_root_documents(self, repo: Repo) -> None:
@@ -538,7 +547,7 @@ class TestVerifyPlanes:
         repo.write("docs/guide.md", en_pair("guide.zh.md"))
         repo.write("docs/guide.zh.md", zh_pair("guide.md"))
         gate_record(repo)
-        code, out, _ = _run(repo, "verify")
+        code, _out, _ = _run(repo, "verify")
         assert code == 0
 
     def test_gate_write_twice_is_stable(self, repo: Repo) -> None:
@@ -595,7 +604,7 @@ class TestGateMains:
         )
         repo.write("docs/guide.zh.md", zh_pair("guide.md"))
         record(repo, ANCHOR)
-        code, out, err = run(repo, "verify")
+        code, _out, err = run(repo, "verify")
         assert code == 0, err
 
     def test_manifest_type_error_exits_two(self, repo: Repo) -> None:
@@ -619,7 +628,7 @@ class TestGateMains:
         def raising_run(*args: object, **kwargs: object) -> None:
             raise OSError("boom")
 
-        monkeypatch.setattr(tp_verify_module.subprocess, "run", raising_run)
+        monkeypatch.setattr(subprocess, "run", raising_run)
         with pytest.raises(SystemExit) as excinfo:
             tp_verify_module._repository_root()
         assert excinfo.value.code == 2

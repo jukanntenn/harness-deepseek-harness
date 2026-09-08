@@ -38,6 +38,17 @@ MANIFEST = {
 }
 
 
+def completed_run[T](
+    completed: subprocess.CompletedProcess[T],
+) -> Callable[..., subprocess.CompletedProcess[T]]:
+    """A ``subprocess.run`` double whose every call returns one fixed result."""
+
+    def run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[T]:
+        return completed
+
+    return run
+
+
 def git(
     *args: str,
     cwd: Path,
@@ -66,7 +77,7 @@ class Repo:
     """Helpers over one disposable repository root."""
 
     def __init__(self, root: Path) -> None:
-        self.root = root
+        self.root: Path = root
 
     def write(self, relative: str, content: str) -> Path:
         """Write one working-tree file, creating parent directories."""

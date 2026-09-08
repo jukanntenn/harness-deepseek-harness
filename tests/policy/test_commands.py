@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -137,11 +138,13 @@ class TestPolicyMainSuccess:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
         monkeypatch.setenv("GH_TOKEN", "token")
         dispatched: list[tuple[str, object]] = []
-        monkeypatch.setattr(
-            policy_module,
-            "run_command",
-            lambda command, name, payload, client: dispatched.append((command, payload)),
-        )
+
+        def recording_command(
+            command: str, event_name: str, event: dict[str, Any], client: object
+        ) -> None:
+            dispatched.append((command, event))
+
+        monkeypatch.setattr(policy_module, "run_command", recording_command)
         parsed = parse_command(policy_module.register, ["pr", "--config", str(config)])
         assert pr_main(parsed) == 0
         assert dispatched == [("pr", {"pull_request": {"number": 1}})]
@@ -156,6 +159,10 @@ class TestPolicyMainSuccess:
         monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
         monkeypatch.setenv("GITHUB_EVENT_NAME", "issues")
         monkeypatch.setenv("GH_TOKEN", "token")
-        monkeypatch.setattr(policy_module, "run_command", lambda *args: None)
+
+        def no_command(*args: object) -> None:
+            return None
+
+        monkeypatch.setattr(policy_module, "run_command", no_command)
         parsed = parse_command(policy_module.register, ["lifecycle", "--config", str(config)])
         assert lifecycle_main(parsed) == 0

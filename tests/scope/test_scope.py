@@ -17,7 +17,7 @@ from hdsh.scope import (
     register,
     render_scope,
 )
-from tests.helpers import Repo, git, parse_command
+from tests.helpers import Repo, completed_run, git, parse_command
 
 
 def _init_repo(path: Path) -> Path:
@@ -240,7 +240,7 @@ class TestScopeEdges:
         import hdsh.scope as scope_module
 
         completed = subprocess.CompletedProcess([], 0, b"one\ntwo\n", b"")
-        monkeypatch.setattr("hdsh.scope.subprocess.run", lambda args, **kwargs: completed)
+        monkeypatch.setattr("hdsh.scope.subprocess.run", completed_run(completed))
         with pytest.raises(ScopeError, match="exactly one commit"):
             scope_module._resolve_commit(".", "base", "main")
 
@@ -248,7 +248,7 @@ class TestScopeEdges:
         import hdsh.scope as scope_module
 
         completed = subprocess.CompletedProcess([], 0, b"one\ntwo\n", b"")
-        monkeypatch.setattr("hdsh.scope.subprocess.run", lambda args, **kwargs: completed)
+        monkeypatch.setattr("hdsh.scope.subprocess.run", completed_run(completed))
         with pytest.raises(ScopeError, match="unique merge base"):
             scope_module._resolve_merge_base(".", "a", "b")
 
@@ -268,7 +268,7 @@ class TestScopeEdges:
         import hdsh.scope as scope_module
 
         completed = subprocess_module.CompletedProcess([], 0, b"\xff\xfe", b"")
-        monkeypatch.setattr("hdsh.scope.subprocess.run", lambda args, **kwargs: completed)
+        monkeypatch.setattr("hdsh.scope.subprocess.run", completed_run(completed))
         with pytest.raises(ScopeError, match="Git stdout is not valid UTF-8"):
             scope_module._execute_git(".", ["--version"], "context")
 
@@ -278,7 +278,7 @@ class TestScopeEdges:
         import hdsh.scope as scope_module
 
         completed = subprocess_module.CompletedProcess([], 0, b"", b"\xff")
-        monkeypatch.setattr("hdsh.scope.subprocess.run", lambda args, **kwargs: completed)
+        monkeypatch.setattr("hdsh.scope.subprocess.run", completed_run(completed))
         with pytest.raises(ScopeError, match="Git stderr is not valid UTF-8"):
             scope_module._execute_git(".", ["--version"], "context")
 
@@ -288,7 +288,7 @@ class TestScopeEdges:
         import hdsh.scope as scope_module
 
         completed = subprocess_module.CompletedProcess([], 1, b"", b"boom\n")
-        monkeypatch.setattr("hdsh.scope.subprocess.run", lambda args, **kwargs: completed)
+        monkeypatch.setattr("hdsh.scope.subprocess.run", completed_run(completed))
         with pytest.raises(ScopeError, match="context: boom"):
             scope_module._require_git(".", ["--version"], "context")
 
@@ -300,7 +300,7 @@ class TestScopeEdges:
         import hdsh.scope as scope_module
 
         completed = subprocess_module.CompletedProcess([], 1, b"", b"")
-        monkeypatch.setattr("hdsh.scope.subprocess.run", lambda args, **kwargs: completed)
+        monkeypatch.setattr("hdsh.scope.subprocess.run", completed_run(completed))
         with pytest.raises(ScopeError, match="Git exited with status 1"):
             scope_module._require_git_bytes(".", ["--version"], "context")
 
