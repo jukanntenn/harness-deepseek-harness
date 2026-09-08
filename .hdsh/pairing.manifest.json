@@ -1,0 +1,12 @@
+{
+  "excluded": [
+    ".agents/rfcs/AGENTS.md",
+    ".agents/rfcs/implemented/AGENTS.md",
+    ".agents/rfcs/archived/AGENTS.md",
+    "docs/AGENTS.md",
+    "docs/i18n/terminology.md",
+    "docs/i18n/style-samples.md"
+  ],
+  "generated": [],
+  "public_blob_root": "https://github.com/jukanntenn/harness-deepseek-harness/blob/main/"
+}

@@ -1,0 +1,70 @@
+# Hook manifest consumed by external projects through prek (or pre-commit):
+#
+#   repos:
+#     - repo: https://github.com/jukanntenn/harness-deepseek-harness
+#       rev: v0.1.0
+#       hooks:
+#         - id: hdsh-pairing-verify
+#
+# Each gate runs against the repository prek invokes it in and reads its
+# configuration from that repository (for example the pairing manifest at
+# .hdsh/pairing.manifest.json). `language: python` installs this package into
+# a prek-managed environment, so consumers need no local checkout.
+- id: hdsh-pairing-verify
+  name: bilingual pairing gate
+  description: Enforce complete en/zh documentation pairs, recorded blob hashes, switchers, and structural signatures.
+  entry: hdsh pairing verify
+  language: python
+  files: '(^|/)(readme|contributing|brand_guidelines|safety)\.md$|\.zh\.md$|\.i18n\.yaml$|^docs/|^\.agents/rfcs/'
+  pass_filenames: false
+  always_run: true
+
+- id: hdsh-rfc-verify
+  name: rfc format gate
+  description: Enforce the RFC header, status, and section skeleton under .agents/rfcs/.
+  entry: hdsh rfc verify
+  language: python
+  files: '^\.agents/rfcs/.*\.md$'
+  pass_filenames: false
+  always_run: true
+
+- id: hdsh-rfc-archive
+  name: frozen rfc archive gate
+  description: Enforce complete sealed triplets, archive headers, sidecar hashes, and the append-only frozen-content manifest under .agents/rfcs/archived/.
+  entry: hdsh rfc archive
+  language: python
+  files: '^\.agents/rfcs/archived/'
+  pass_filenames: false
+  always_run: true
+
+- id: hdsh-scope
+  name: change scope report
+  description: Report the explicit committed and worktree scope of a repository change; consumers pass args like [--base, origin/main].
+  entry: hdsh scope
+  language: python
+  stages: [manual]
+  pass_filenames: false
+
+- id: hdsh-docs-wrap
+  name: markdown hard-wrap gate
+  description: Enforce one physical line per prose paragraph over the Markdown corpus configured in .hdsh/docs.manifest.json.
+  entry: hdsh docs wrap
+  language: python
+  files: '\.md$'
+  pass_filenames: false
+
+- id: hdsh-docs-links
+  name: markdown cross-link gate
+  description: Verify relative Markdown links, images, and reference definitions resolve, with #fragment anchors naming real heading slugs or explicit <a id> anchors.
+  entry: hdsh docs links
+  language: python
+  files: '\.md$'
+  pass_filenames: false
+
+- id: hdsh-docs-budgets
+  name: doc word-budget gate
+  description: Enforce wc -w word ceilings for standing documents from the docBudgets section of .hdsh/docs.manifest.json; --list reports usage.
+  entry: hdsh docs budgets
+  language: python
+  files: '\.md$|\.hdsh/docs\.manifest\.json$'
+  pass_filenames: false

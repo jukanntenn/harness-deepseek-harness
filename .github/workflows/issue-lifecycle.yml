@@ -1,0 +1,69 @@
+name: Issue lifecycle
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - assigned
+      - unassigned
+      - labeled
+      - unlabeled
+      - closed
+      - reopened
+      - field_added
+      - field_removed
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+      - review_requested
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-lifecycle-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    name: Issue lifecycle
+    # Runs on every pull_request_review event so the check reports success rather
+    # than a gray "skipped" segment. The token-creating and board-mutating steps
+    # are gated at step level (a skipped step does not gray the job): only a
+    # changes_requested review drives the Project board; approved/commented
+    # reviews never mint a write-capable App token.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+      - name: Create project token
+        id: app-token
+        if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
+        with:
+          client-id: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HDSH_ISSUE_APP_PRIVATE_KEY }}
+          owner: jukanntenn
+          repositories: harness-deepseek-harness
+      - name: Handle repository event
+        if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          uv sync --frozen
+          uv run --no-sync hdsh policy lifecycle --config .github/issue-management/config.json

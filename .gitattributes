@@ -1,0 +1,13 @@
+# The repo's canonical text form is LF, enforced at checkout too: no smudge
+# boundary between working tree and repo, so byte-level gates (blob hashing,
+# pairing comparisons, coverage offsets) see one form on every host.
+* text=auto eol=lf
+
+*.png binary
+*.gif binary
+*.pdf binary
+
+# Pairing records are generated from the three confirmed owner-blob pairs.
+# The worktree-local installer (hdsh worktree install) registers the fail-closed
+# driver command.
+*.i18n.yaml merge=hdsh-pairing

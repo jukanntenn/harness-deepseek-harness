@@ -1,0 +1,35 @@
+# Gates converge on prek: the same ids this repo exposes through
+# .pre-commit-hooks.yaml also serve external projects. Hooks stay fast local
+# checkpoints; CI owns the full gate matrix (ruff, basedpyright, pytest with
+# 100% coverage). Install worktree-locally with `uv run hdsh worktree install`.
+#
+# Local hooks run inside the uv-managed project environment (`language:
+# system` entries invoke `uv run --no-sync ...`), so prek builds no separate
+# hook environments for this repository. Fixer hooks that rewrite files exit
+# non-zero; re-stage and commit again.
+
+default_install_hook_types = ["pre-commit", "pre-merge-commit", "pre-push"]
+
+[[repos]]
+repo = "builtin"
+# Byte stability: pairing records hold blob hashes and archived RFCs are
+# frozen, so the whitespace fixers never rewrite either.
+hooks = [
+    { id = "trailing-whitespace", exclude = '\.i18n\.yaml$|\.agents/rfcs/archived/' },
+    { id = "end-of-file-fixer", exclude = '\.i18n\.yaml$|\.agents/rfcs/archived/' },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    { id = "hdsh-pairing-verify-cached", name = "translation pairing (staged records)", entry = "uv run --no-sync hdsh pairing verify --cached", language = "system", files = '\.i18n\.yaml$', exclude = '\.agents/rfcs/archived/' },
+    { id = "hdsh-ruff-lint", name = "ruff lint (staged)", entry = "uv run --no-sync ruff check --fix", language = "system", files = '\.py$' },
+    { id = "hdsh-ruff-format", name = "ruff format (staged)", entry = "uv run --no-sync ruff format", language = "system", files = '\.py$' },
+    { id = "hdsh-whitespace", name = "whitespace (staged)", entry = "git diff --cached --check", language = "system", pass_filenames = false, always_run = true },
+    { id = "hdsh-rfc-verify", name = "rfc format", entry = "uv run --no-sync hdsh rfc verify", language = "system", pass_filenames = false, always_run = true },
+    { id = "hdsh-rfc-archive", name = "frozen rfc archive", entry = "uv run --no-sync hdsh rfc archive", language = "system", files = '\.agents/rfcs/archived/', pass_filenames = false, always_run = true },
+    { id = "hdsh-docs-wrap", name = "markdown hard-wrap", entry = "uv run --no-sync hdsh docs wrap", language = "system", files = '\.md$', pass_filenames = false },
+    { id = "hdsh-docs-links", name = "markdown cross-links", entry = "uv run --no-sync hdsh docs links", language = "system", files = '\.md$', pass_filenames = false },
+    { id = "hdsh-docs-budgets", name = "doc budgets", entry = "uv run --no-sync hdsh docs budgets", language = "system", files = '\.md$|\.hdsh/docs\.manifest', pass_filenames = false },
+    { id = "hdsh-basedpyright", name = "basedpyright", entry = "uv run --no-sync basedpyright", language = "system", stages = ["pre-push"], pass_filenames = false, always_run = true, require_serial = true },
+]

@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record docs/cookbook/responding-to-pr-review-on-a-stack.md
+responding-to-pr-review-on-a-stack.md: 32ed1b7a28639f3717b0bb1826a847b09799f9a2
+responding-to-pr-review-on-a-stack.zh.md: aad31b234d0407a09e655a290042ec1890ce4f0a

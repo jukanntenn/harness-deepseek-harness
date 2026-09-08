@@ -1,0 +1,155 @@
+[project]
+name = "harness-deepseek-harness"
+version = "0.1.0"
+description = "Reusable harness framework governance gates: issue policy, bilingual documentation pairing, and pull-request workflow tooling, wired through prek."
+readme = "README.md"
+authors = [{ name = "harness-deepseek-harness maintainers" }]
+license = { text = "MIT" }
+requires-python = ">=3.12"
+dependencies = ["markdown-it-py>=3.0.0"]
+
+[project.urls]
+Repository = "https://github.com/jukanntenn/harness-deepseek-harness"
+
+[project.scripts]
+hdsh = "hdsh.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.3,<1"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "hdsh"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.29.0",
+    "pytest>=8.4.0",
+    "pytest-cov>=6.2.0",
+    "ruff>=0.12.0",
+    "ty>=0.0.1a5",
+]
+
+# Strictest available defaults; relaxations require an accepted RFC first.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+# Every ignore below is a documented structural exception, not a relaxation
+# of strictness; removing one requires an accepted RFC.
+ignore = [
+    "COM812",  # conflicts with the formatter
+    "ISC001",  # conflicts with the formatter
+    "D203",    # conflicts with the docstring convention used (D211)
+    "D213",    # conflicts with the docstring convention used (D212)
+    "D105",    # section skeletons replace magic docstrings
+    "EM101",   # fail-loud long diagnostic messages are this project's style
+    "EM102",   # same as EM101
+    "TRY003",  # same as EM101
+    "CPY001",  # no per-file copyright header convention in this repository
+    "T201",    # the gates are CLIs; stdout print is their output channel
+    "FBT001",  # gate signatures keep boolean flags positional in the stable CLI surface
+    "FBT002",  # same as FBT001
+    "FBT003",  # same as FBT001
+    "S603",    # spawning git/prek/uv without a shell is the tool's entire purpose
+    "S607",    # PATH lookup for git/prek/uv is intended
+    "TRY301",  # parse-then-raise inside try blocks is the validation pattern
+    "RUF001",  # bilingual repository: full-width CJK punctuation is intentional
+    "RUF002",  # same as RUF001
+    "RUF003",  # same as RUF001
+    "PLC0415", # CLI entrypoints import lazily to keep gate startup minimal
+    "PLR0911", # complexity ceilings are metrics, not defects; see RFC review instead
+    "PLR0912", # same as PLR0911
+    "PLR0913", # same as PLR0911
+    "PLR0915", # same as PLR0911
+    "C901",    # same as PLR0911
+    "PTH118",  # repository-relative POSIX path strings are handled as strings by contract
+    "PTH119",  # same as PTH118
+    "TC001",   # keep runtime annotations simple; no TYPE_CHECKING gymnastics in a gate suite
+    "TC002",   # same as TC001
+    "TC003",   # same as TC001
+    "TD002",   # TODO markers are the repo convention (urgency-ordered), not debt notes
+    "TD003",   # same as TD002
+    "FIX002",  # same as TD002
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # assertions are the test language
+    "D",       # test names document behavior
+    "ANN",     # test fixtures are typed by pytest
+    "PLR2004", # magic numbers pin behavior under test
+    "SLF001",  # tests exercise private contracts directly
+    "ARG",     # fake transports and protocol doubles must keep full signatures
+    "S105",    # token-shaped literals are fixtures, not credentials
+    "S106",    # same as S105
+    "E402",    # late imports inside tests are scoped deliberately
+    "RUF059",  # unpacked-but-unused fixture variables document the call shape
+    "PT018",   # composite assertions read naturally in scenario tests
+    "RUF043",  # raised-message regexes are pinned substrings, not full grammars
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.basedpyright]
+typeCheckingMode = "all"
+venvPath = "."
+venv = ".venv"
+pythonPlatform = "All"
+# Deactivations are structural, mirroring the ruff policy: dynamic values
+# appear only at validated boundaries (JSON/GraphQL payloads, the untyped
+# markdown-it parser, injected transport doubles), so the Any/unknown family
+# cannot add signal there; writer-style call sites never consume their result.
+reportAny = false
+reportExplicitAny = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportUnusedCallResult = false
+reportUnusedParameter = false
+reportImplicitStringConcatenation = false
+
+# Test-only noise sources stay inside the tests environment below: tests
+# exercise private contracts and hand-rolled transport doubles.
+[[tool.basedpyright.executionEnvironments]]
+root = "src"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["."]
+reportPrivateUsage = "warning"
+reportPrivateLocalImportUsage = "warning"
+reportUninitializedInstanceVariable = "warning"
+reportImplicitOverride = "warning"
+reportUnusedVariable = "warning"
+reportUnusedFunction = "warning"
+reportUnknownLambdaType = "warning"
+reportArgumentType = "warning"
+reportImplicitRelativeImport = "warning"
+reportIndexIssue = "warning"
+reportAttributeAccessIssue = "warning"
+reportUnannotatedClassAttribute = "warning"
+
+[tool.ty.src]
+include = ["src", "tests"]
+respect-ignore-files = false
+
+[tool.ty.rules]
+unresolved-attribute = "error"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=hdsh --cov-branch --cov-fail-under=100 --cov-report=term-missing"
+
+[tool.coverage.run]
+branch = true
+source = ["hdsh"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
