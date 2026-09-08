@@ -2,11 +2,11 @@
   "owner": "jukanntenn",
   "accountType": "user",
   "repository": "harness-deepseek-harness",
-  "projectNumber": 1,
+  "projectNumber": 2,
   "projectTitle": "HDSH Issue Management",
   "lifecycleActor": "gh2bda",
   "priorityField": "Priority",
-  "startDateField": "Start Date",
+  "startDateField": "Start date",
   "projectTimeZone": "Asia/Shanghai",
   "allowUnassignedOwner": true,
   "statuses": [
