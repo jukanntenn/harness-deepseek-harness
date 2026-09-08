@@ -2,7 +2,9 @@
 
 English | [中文](README.zh.md)
 
-Reusable governance gates for the Python ecosystem, wired through [prek](https://github.com/j178/prek): GitHub issue/PR policy, bilingual documentation pairing, documentation gates, and pull-request workflow tooling. External projects adopt the gates by pointing prek at this repository; this repository uses the same hooks it ships.
+[![CI](https://github.com/jukanntenn/harness-deepseek-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/jukanntenn/harness-deepseek-harness/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Reusable governance gates for the Python ecosystem, wired through [prek](https://github.com/j178/prek): GitHub issue/PR policy, bilingual documentation pairing, documentation gates, and pull-request workflow tooling. External projects adopt the gates by pointing prek at this repository; this repository uses the same hooks it ships. It turns repository conventions into mechanically executed checks instead of reviewer memory — on organization and personal accounts alike.
 
 ## What is here
 
@@ -21,13 +23,15 @@ Reusable governance gates for the Python ecosystem, wired through [prek](https:/
 # .pre-commit-config.yaml (or prek.toml) in the consuming project
 repos:
   - repo: https://github.com/jukanntenn/harness-deepseek-harness
-    rev: v0.1.0
+    rev: v0.1.0  # pin the release tag you adopt
     hooks:
       - id: hdsh-pairing-verify
       - id: hdsh-rfc-verify
+      - id: hdsh-rfc-archive
       - id: hdsh-docs-wrap
       - id: hdsh-docs-links
       - id: hdsh-docs-budgets
+      # hdsh-scope runs at the manual stage; pass args like [--base, origin/main]
 ```
 
 The pairing gate reads its corpus scope from `.hdsh/pairing.manifest.json` and the documentation gates read theirs from `.hdsh/docs.manifest.json` in the consuming repository; see [docs/i18n/README.md](docs/i18n/README.md) for the pairing contract and the manifest rules.
@@ -38,9 +42,25 @@ The pairing gate reads its corpus scope from `.hdsh/pairing.manifest.json` and t
 uv sync                     # create the environment
 uv run prek install         # local git hooks (or: uv run hdsh worktree install for worktree-local)
 uv run pytest               # tests with the 100% coverage gate
-uv run ruff check .         # lint and format
+uv run ruff check .         # lint
+uv run ruff format .        # format
 uv run basedpyright         # type check
 uv run hdsh pairing list   # bilingual pairing state
 ```
 
 Every non-trivial change ships an RFC in `.agents/rfcs/` and keeps documentation pairs consistent; see [AGENTS.md](AGENTS.md) for the standing rules.
+
+## Community & support
+
+- Usage and adoption questions → [Discussions](https://github.com/jukanntenn/harness-deepseek-harness/discussions) (Q&A); valuable threads are distilled into RFCs.
+- Reproducible defects and concrete feature requests → [Issues](https://github.com/jukanntenn/harness-deepseek-harness/issues) with the templates.
+- Security → [private vulnerability reporting](https://github.com/jukanntenn/harness-deepseek-harness/security/advisories/new), never a public issue; [SECURITY.md](docs/SECURITY.md) owns the policy.
+- Community best-effort support; no commercial support or SLA.
+
+## Contributing
+
+Every change starts with an issue — even typo fixes; pull requests follow the checklist and need one cross-account approval; non-trivial changes ship an RFC; documentation moves as bilingual pairs. [CONTRIBUTING.md](docs/CONTRIBUTING.md) carries the details; `good first issue` issues are entry points. Maintained by jukanntenn and contributors on a best-effort basis.
+
+## License
+
+[MIT](LICENSE)
