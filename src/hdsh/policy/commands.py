@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 TOOL = "hdsh policy"
 
+_OWNER_TYPE_BY_ACCOUNT_TYPE = {"user": "User", "organization": "Organization"}
+
 
 class PolicyRunner(Protocol):
     """The client surface the command dispatch consumes."""
@@ -54,6 +56,45 @@ def run_command(
         client.run_lifecycle(event_name, event)
     else:
         msg = f"unknown policy command: {command}"
+        raise ValueError(msg)
+
+
+def validate_context(config: PolicyConfig, event: dict[str, Any]) -> None:
+    """Cross-validate the checked-in config against the event repository context.
+
+    Args:
+        config: The repository's validated policy configuration.
+        event: The GitHub event payload.
+
+    Raises:
+        ValueError: When the payload carries no repository context, or when
+            that context contradicts the configuration.
+    """
+    repository = event.get("repository")
+    if not isinstance(repository, dict):
+        msg = "the event payload carries no repository context to validate against"
+        raise ValueError(msg)  # noqa: TRY004
+    owner = repository.get("owner")
+    if not isinstance(owner, dict):
+        msg = "the event payload carries no repository owner context to validate against"
+        raise ValueError(msg)  # noqa: TRY004
+    name = repository.get("name")
+    if name != config.repository:
+        msg = (
+            f"config.repository {config.repository!r} does not match the event repository {name!r}"
+        )
+        raise ValueError(msg)
+    login = owner.get("login")
+    if login != config.owner:
+        msg = f"config.owner {config.owner!r} does not match the event owner {login!r}"
+        raise ValueError(msg)
+    owner_type = owner.get("type")
+    expected_type = _OWNER_TYPE_BY_ACCOUNT_TYPE[config.account_type]
+    if owner_type != expected_type:
+        msg = (
+            f"config.accountType {config.account_type!r} does not match the event "
+            f"owner type {owner_type!r} (expected {expected_type!r})"
+        )
         raise ValueError(msg)
 
 
@@ -126,10 +167,12 @@ def _policy_main(command: str, args: argparse.Namespace) -> int:
         if not resolved_event_path:
             msg = "GITHUB_EVENT_PATH is not set"
             raise RuntimeError(msg)
+        event = read_event(resolved_event_path)
+        validate_context(config, event)
         run_command(
             command,
             os.environ.get("GITHUB_EVENT_NAME", ""),
-            read_event(resolved_event_path),
+            event,
             client_from_environment(config),
         )
     except (RuntimeError, ValueError, OSError) as error:
