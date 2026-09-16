@@ -39,7 +39,7 @@ Issue 使用原生 Issue Type 而非 `kind/*`，其 `area/*` 标签保持可选�
 
 ### Issue Project 状态把评审事件当作命令
 
-Issue 生命周期工作流（`.github/workflows/issue-lifecycle.yml`）把评审 webhook 当作命令，经由 [`src/hdsh/policy/`](../../../../src/hdsh/policy/) 中的政策引擎分派，以 `hdsh policy lifecycle --config .github/issue-management/config.json` 调用，事件取自 `--event` 或 `GITHUB_EVENT_PATH`。`pull_request.review_requested`（包括重复请求）目标为 `In review`。`pull_request_review.submitted` 仅当 `review.state` 为 `changes_requested` 时目标为 `In progress`；submitted 事件仍然必要，因为评审者可以在没有先前评审请求事件的情况下请求修改。批准和评论型提交会运行其生命周期作业但不做任何事——它们永远到不了 Project 令牌步骤，因此不会铸造具有写权限的令牌——已撤销的评审不被订阅。
+Issue 生命周期工作流（`.github/workflows/issue-lifecycle.yml`）订阅事件，其余一切委托给仓库的 [`issue-lifecycle` composite action](../../../../.github/actions/issue-lifecycle/action.yml)（[决策](../feature/2026-09-17-issue-policy-composite-actions.zh.md)），由它把评审 webhook 当作命令，经由 [`src/hdsh/policy/`](../../../../src/hdsh/policy/) 中的政策引擎分派，以 `hdsh policy lifecycle --config .github/issue-management/config.json` 调用，事件取自 `--event` 或 `GITHUB_EVENT_PATH`。`pull_request.review_requested`（包括重复请求）目标为 `In review`。`pull_request_review.submitted` 仅当 `review.state` 为 `changes_requested` 时目标为 `In progress`；submitted 事件仍然必要，因为评审者可以在没有先前评审请求事件的情况下请求修改。批准和评论型提交会运行其生命周期作业但不做任何事——它们永远到不了 Project 令牌步骤，因此不会铸造具有写权限的令牌——已撤销的评审不被订阅。
 
 其余被订阅的普通 pull request 事件仍是只向前的实现信号：它们可以把 `Inbox`、`Backlog` 或 `Ready` 推进到 `In progress`，但永远不会把 `In review` 向后移动。评审请求命令可以把任何更早的活跃状态推进到 `In review`。请求修改命令可以把更早的活跃状态向前推进到 `In progress`，而只有当目标 Project 的最新状态事件是由配置的生命周期执行者写入时，才能把 `In review` 退回；最新执行者是人类或未知时保持当前状态。
 
@@ -49,7 +49,7 @@ Issue 生命周期工作流（`.github/workflows/issue-lifecycle.yml`）把评�
 
 `HDSH Issue Management` Project 以 Project 自定义字段的形式拥有 `Priority` 和 `Start Date`。政策从配置的 Project 解析这两个字段，拒绝基于 Issue 的字段或错误的数据类型，从 Project 条目读取 `Priority`，并通过 `updateProjectV2ItemFieldValue` 写入 `Start Date`。
 
-政策工作流用仓库 `GITHUB_TOKEN` 做 REST 的 Issue 与 pull request 读取，用一个仅限仓库 Issues 和组织 Projects 读权限的 GitHub App 令牌做 ProjectV2 查询；生命周期的变更操作使用具有写权限的 App 令牌。个人账户部署以一枚只带 `project` scope 的 classic PAT（`HDSH_PROJECT_PAT`）取代 App 做 ProjectV2，REST 走 `github.token`；该形态由[个人账户支持 RFC](../feature/2026-09-08-user-account-issue-policy.zh.md)持有。生命周期工作流只在 `pull_request.opened` 时初始化 `Start Date`：它读取 pull request 的实时正文，保留每个解析为 Issue 的同仓库引用，把 `created_at` 转换为配置的 Project 时区下的日历日期，确保该 Issue 是 Project 条目，且仅当 Project 当前值为空时才写入日期。
+政策工作流用仓库 `GITHUB_TOKEN` 做 REST 的 Issue 与 pull request 读取，用一个仅限仓库 Issues 和组织 Projects 读权限的 GitHub App 令牌做 ProjectV2 查询；生命周期的变更操作使用具有写权限的 App 令牌。个人账户部署以一枚只带 `project` scope 的 classic PAT（`HDSH_ISSUE_PROJECT_TOKEN`）取代 App 做 ProjectV2，REST 走 `github.token`；该形态由[个人账户支持 RFC](../feature/2026-09-08-user-account-issue-policy.zh.md)持有。生命周期工作流只在 `pull_request.opened` 时初始化 `Start Date`：它读取 pull request 的实时正文，保留每个解析为 Issue 的同仓库引用，把 `created_at` 转换为配置的 Project 时区下的日历日期，确保该 Issue 是 Project 条目，且仅当 Project 当前值为空时才写入日期。
 
 ### 评审回路
 
@@ -57,7 +57,7 @@ Issue 生命周期工作流（`.github/workflows/issue-lifecycle.yml`）把评�
 
 ## 验证
 
-`tests/policy/` 钉住封闭的 kind 集合、恰一个 kind 与至少一个 area 规则、Issue 侧禁令、事件到命令的映射、请求修改命令之后的重复评审请求转换、请求修改回退、终态保护、人类覆盖保留、`Priority` 与 `Start Date` 的 Project 自定义字段要求、仓库读取与 Project 读取的凭据分离、配置时区的日期边界、仅 opened 分派、空值写入、既有值保留、缺失的 Project 条目，以及 `updateProjectV2ItemFieldValue` 变更。工作流文件的订阅事件、令牌与看板步骤上的步骤级门控、只读的 Project 令牌权限，以及独立的 `ready_for_review` 政策触发器，由对两个工作流文件的评审覆盖。落地流程核实原生支持、同仓库分支、实时作者、官方成员资格与顺序、合并范围和最终已合并状态。
+`tests/policy/` 钉住封闭的 kind 集合、恰一个 kind 与至少一个 area 规则、Issue 侧禁令、事件到命令的映射、请求修改命令之后的重复评审请求转换、请求修改回退、终态保护、人类覆盖保留、`Priority` 与 `Start Date` 的 Project 自定义字段要求、仓库读取与 Project 读取的凭据分离、配置时区的日期边界、仅 opened 分派、空值写入、既有值保留、缺失的 Project 条目，以及 `updateProjectV2ItemFieldValue` 变更。工作流文件的订阅事件、令牌与看板步骤上的步骤级门控、只读的 Project 令牌权限，以及独立的 `ready_for_review` 政策触发器，由对两个工作流文件及其 composite action 的评审覆盖；CI 的消费方彩排演练 action 的 flavor 脚本、配置与事件的交叉验证，以及全限定的自托管引用。落地流程核实原生支持、同仓库分支、实时作者、官方成员资格与顺序、合并范围和最终已合并状态。
 
 ## 备选方案
 

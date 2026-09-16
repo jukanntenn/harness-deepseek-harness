@@ -183,3 +183,11 @@ jobs:
             exit 1
           fi
           grep -q "does not match the event repository" "$fixture/err"
+      - name: Assert fully-qualified self-hosting references
+        # A relative `./.github/actions/...` reference would load the action
+        # from the pull request's merge ref and let a PR modify its own
+        # validator; this assertion keeps that failure mode mechanical.
+        run: |
+          grep -q "uses: jukanntenn/harness-deepseek-harness/.github/actions/issue-policy@" .github/workflows/issue-policy.yml
+          grep -q "uses: jukanntenn/harness-deepseek-harness/.github/actions/issue-lifecycle@" .github/workflows/issue-lifecycle.yml
+          ! grep -rn "uses: \./" .github/workflows/issue-policy.yml .github/workflows/issue-lifecycle.yml

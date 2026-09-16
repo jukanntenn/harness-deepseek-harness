@@ -24,7 +24,7 @@ The five-name classification (Idea, Feature, Bug, Research, Task) is unchanged. 
 
 ### Credentials follow the flavor
 
-Organization deployments are unchanged: one GitHub App (Issues and Pull requests read/write, organization Projects read/write) mints the Project-read token in the policy workflow and the REST-plus-GraphQL token in the lifecycle workflow. User deployments cannot grant an App Project access, so REST — including audit comments — runs on `github.token` (the `github-actions[bot]` identity the marker lookup already expects) and ProjectV2 GraphQL runs on a classic PAT with only the `project` scope, stored as `HDSH_PROJECT_PAT` and held by a dedicated machine account. Each workflow resolves the flavor from the checked-out `config.json` and fails with a named error when the matching credential is missing; the later `||` token selections are proven by that resolution step, not silent defaults.
+Organization deployments are unchanged: one GitHub App (Issues and Pull requests read/write, organization Projects read/write) mints the Project-read token in the policy workflow and the REST-plus-GraphQL token in the lifecycle workflow. User deployments cannot grant an App Project access, so REST — including audit comments — runs on `github.token` (the `github-actions[bot]` identity the marker lookup already expects) and ProjectV2 GraphQL runs on a classic PAT with only the `project` scope, stored as `HDSH_ISSUE_PROJECT_TOKEN` and held by a dedicated machine account. Each workflow resolves the flavor from the checked-out `config.json` and fails with a named error when the matching credential is missing; the later `||` token selections are proven by that resolution step, not silent defaults.
 
 ### The identity model
 
