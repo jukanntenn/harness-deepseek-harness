@@ -1,6 +1,6 @@
 """Fail-closed composition of bilingual pairing records during Git merges.
 
-This module owns both the merge-driver entry (``hdsh pairing merge
+This module owns the merge-driver entry (``hdsh pairing merge-driver
 <ancestor> <current> <other> <repository-path>``, registered by the worktree
 installer) and the explicit post-conflict resolver (``hdsh pairing merge
 --resolve``).
@@ -532,77 +532,124 @@ def resolve_conflicts(
     return [path for path, _ in resolutions]
 
 
+def _repository_root() -> str:
+    """Return the absolute path of the repository working tree root.
+
+    Returns:
+        The working tree root Git reports for the process directory.
+
+    Raises:
+        subprocess.CalledProcessError: When Git is unavailable or the process
+            directory is not inside a work tree.
+    """
+    return (
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            check=True,
+        )
+        .stdout.decode("utf-8")
+        .strip()
+    )
+
+
+def _write_text_conflict(
+    meta_path: str, current_path: str, ancestor_path: str, other_path: str
+) -> None:
+    """Overwrite the current record file with an ordinary text conflict.
+
+    Git invokes merge drivers from the repository root, so ``git merge-file``
+    resolves from the process working directory without ``-C``. Statuses above
+    the conflict range mean the fallback itself failed; the caller still exits
+    non-zero, so Git keeps the index stages unresolved either way.
+
+    Args:
+        meta_path: Repository-relative record path, used for conflict labels.
+        current_path: Driver file to overwrite in place.
+        ancestor_path: Common-ancestor driver file.
+        other_path: Other-side driver file.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "merge-file",
+                "-L",
+                f"{meta_path}:current",
+                "-L",
+                f"{meta_path}:ancestor",
+                "-L",
+                f"{meta_path}:other",
+                "--",
+                current_path,
+                ancestor_path,
+                other_path,
+            ],
+            capture_output=True,
+            check=False,
+        )
+    except OSError as error:
+        print(f"{TOOL}: text conflict fallback failed: {error}", file=sys.stderr)
+        return
+    if result.returncode > _GIT_MERGE_CONFLICT_MAX_STATUS:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        print(
+            f"{TOOL}: text conflict fallback failed with status {result.returncode}: {detail}",
+            file=sys.stderr,
+        )
+
+
 def register(subparsers: cliargs.CommandSubparsers) -> None:
     """Register the ``merge`` command leaf."""
-    parser = subparsers.add_parser("merge", help="merge driver and conflict resolver")
+    parser = subparsers.add_parser("merge", help="conflict resolver and runtime probe")
     parser.add_argument("--probe", action="store_true", help="check runtime availability")
     parser.add_argument("--resolve", action="store_true", help="resolve staged pairing conflicts")
-    parser.add_argument(
-        "paths",
-        nargs="*",
-        metavar="PATH",
-        help="driver form: <ancestor> <current> <other> <repository-path>",
-    )
     parser.set_defaults(handler=main)
 
 
+def register_driver(subparsers: cliargs.CommandSubparsers) -> None:
+    """Register the ``merge-driver`` command leaf."""
+    parser = subparsers.add_parser(
+        "merge-driver", help="Git merge-driver entry for pairing records"
+    )
+    parser.add_argument(
+        "paths",
+        nargs=_DRIVER_ARG_COUNT,
+        metavar="PATH",
+        help="<ancestor> <current> <other> <repository-path>",
+    )
+    parser.set_defaults(handler=driver_main)
+
+
 def main(args: argparse.Namespace) -> int:
-    """Git merge-driver and explicit conflict-resolver entry point.
+    """Explicit conflict-resolver entry point.
 
     Args:
-        args: Parsed leaf namespace; ``--probe`` checks runtime availability,
-            ``--resolve`` resolves staged pairing conflicts, and the driver
-            form takes the four paths Git passes.
+        args: Parsed leaf namespace; ``--probe`` checks runtime availability
+            and ``--resolve`` resolves staged pairing conflicts.
 
     Returns:
-        The exit code: 0 composed or resolved, 1 composition failure, 2 usage.
+        The exit code: 0 resolved (or nothing to resolve), 1 failure, 2 usage.
     """
-    modes = [args.probe, args.resolve, bool(args.paths)]
-    if modes.count(True) != 1 or (args.paths and len(args.paths) != _DRIVER_ARG_COUNT):
-        print(
-            f"{TOOL}: usage: --probe | --resolve | <ancestor> <current> <other> <repository-path>",
-            file=sys.stderr,
-        )
+    if args.probe == args.resolve:
+        print(f"{TOOL}: usage: --probe | --resolve", file=sys.stderr)
         return 2
     try:
         if args.probe:
             return 0
-        root = (
-            subprocess.run(
-                ["git", "rev-parse", "--show-toplevel"],
-                capture_output=True,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .strip()
-        )
-        if args.resolve:
-            manifest = pairing_manifest(root)
-            resolved = resolve_conflicts(
-                root,
-                pair_source_predicate(manifest),
-                generated=manifest.generated,
-                public_blob_root=manifest.public_blob_root,
-            )
-            if not resolved:
-                print(f"{TOOL}: no unresolved pairing records")
-            else:
-                for path in resolved:
-                    print(f"{TOOL}: resolved {path}")
-            return 0
-        ancestor_path, current_path, other_path, meta_path = args.paths
+        root = _repository_root()
         manifest = pairing_manifest(root)
-        result = merge_records(
+        resolved = resolve_conflicts(
             root,
-            meta_path,
-            Path(ancestor_path).read_text(encoding="utf-8"),
-            Path(current_path).read_text(encoding="utf-8"),
-            Path(other_path).read_text(encoding="utf-8"),
-            is_pair_source=pairing_source(root),
+            pair_source_predicate(manifest),
             generated=manifest.generated,
             public_blob_root=manifest.public_blob_root,
         )
-        Path(current_path).write_text(result.record_text, encoding="utf-8")
+        if not resolved:
+            print(f"{TOOL}: no unresolved pairing records")
+        else:
+            for path in resolved:
+                print(f"{TOOL}: resolved {path}")
     except (ValueError, GitError, OSError, subprocess.CalledProcessError) as error:
         print(f"{TOOL}: {error}", file=sys.stderr)
         print(
@@ -612,4 +659,43 @@ def main(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    return 0
+
+
+def driver_main(args: argparse.Namespace) -> int:
+    """Git merge-driver entry point.
+
+    Args:
+        args: Parsed leaf namespace carrying the four paths Git passes.
+
+    Returns:
+        The exit code: 0 composed, 1 composition failure with an ordinary
+        text conflict left in place.
+    """
+    ancestor_path, current_path, other_path, meta_path = args.paths
+    try:
+        root = _repository_root()
+        manifest = pairing_manifest(root)
+        result = merge_records(
+            root,
+            meta_path,
+            Path(ancestor_path).read_text(encoding="utf-8"),
+            Path(current_path).read_text(encoding="utf-8"),
+            Path(other_path).read_text(encoding="utf-8"),
+            is_pair_source=pair_source_predicate(manifest),
+            generated=manifest.generated,
+            public_blob_root=manifest.public_blob_root,
+        )
+    except (ValueError, GitError, OSError, subprocess.CalledProcessError) as error:
+        print(f"{TOOL}: {error}", file=sys.stderr)
+        _write_text_conflict(meta_path, current_path, ancestor_path, other_path)
+        print(
+            f"{TOOL}: left an ordinary text conflict in {meta_path}; resolve owner "
+            "conflicts, then confirm the pair with `hdsh pairing record <pair>`; "
+            "rerun `hdsh pairing merge --resolve` for other safe records, or run "
+            "`git merge --abort` to cancel",
+            file=sys.stderr,
+        )
+        return 1
+    Path(current_path).write_text(result.record_text, encoding="utf-8")
     return 0

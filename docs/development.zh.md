@@ -50,9 +50,9 @@ uv run basedpyright
 
 ### Git 集成
 
-配对合并驱动在两侧语言文件都使用 Git 默认文本策略且能干净合并时，从确认过的祖先、当前与对方所属 blob 推导出冲突的 `.i18n.yaml` 记录。它在所属文件冲突、非文本合并配置或无效记录上 fail-closed；合并已经停下之后，运行 `uv run hdsh pairing merge --resolve`，它会暂存每份可安全生成的配对记录，并在还有配对冲突需要手工处理时以失败退出。驱动接受的文件与状态的精确定义见[双语文档契约](i18n/README.zh.md#the-pairing-contract)。
+配对合并驱动在两侧语言文件都使用 Git 默认文本策略且能干净合并时，从确认过的祖先、当前与对方所属 blob 推导出冲突的 `.i18n.yaml` 记录。它是 `hdsh pairing merge-driver` CLI 入口，由 `uv run hdsh worktree install` 注册到当前 worktree；它在所属文件冲突、非文本合并配置或无效记录上 fail-closed，合并已经停下之后，`uv run hdsh pairing merge --resolve` 会暂存每份可安全生成的配对记录，并在还有配对冲突需要手工处理时以失败退出。驱动接受的文件与状态的精确定义见[双语文档契约](i18n/README.zh.md#the-pairing-contract)。
 
-驱动运行时不可用时，shell 启动器降级为纯文本合并并以 1 退出，Git 因此保持索引阶段未解析；恢复环境后运行 `hdsh pairing merge --resolve`，或执行 `git merge --abort`。
+组合失败时，该入口在记录文件里写入普通文本冲突，打印恢复指引，并以非零退出让 Git 保持索引阶段未解析。驱动的前置条件是干净的——hdsh 已安装且项目环境已同步——前置条件不满足时驱动命令本身失败，Git 以驱动错误停止合并；用 `uv sync` 恢复环境后运行 `hdsh pairing merge --resolve`，或执行 `git merge --abort`。
 
 prek 钩子在 [prek.toml](../prek.toml) 中配置为快速本地检查点：
 

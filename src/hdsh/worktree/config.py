@@ -14,11 +14,13 @@ from hdsh.worktree.ownership import lstat_if_present
 
 _CONFIG_PAIR_FIELDS = 3
 REPOSITORY_EXTENSION_PATTERN = re.compile(r"^extensions\.")
+PAIRING_MERGE_DRIVER_COMMAND = "uv run --no-sync hdsh pairing merge-driver %O %A %B %P"
+LEGACY_PAIRING_MERGE_DRIVER_COMMAND = "scripts/pairing-merge-driver.sh %O %A %B %P"
 PAIRING_MERGE_DRIVER_CONFIG = (
     ("merge.hdsh-pairing.name", "harness-deepseek-harness bilingual pairing records"),
     (
         "merge.hdsh-pairing.driver",
-        "scripts/pairing-merge-driver.sh %O %A %B %P",
+        PAIRING_MERGE_DRIVER_COMMAND,
     ),
 )
 PAIRING_MERGE_DRIVER_PROBE = ("uv", "run", "--no-sync", "hdsh", "pairing", "merge", "--probe")
@@ -332,7 +334,33 @@ def _unset_worktree_config(root: str, key: str) -> None:
     run_git(root, ["config", "--worktree", "--unset-all", key], allow_status=(5,))
 
 
-def install_pairing_merge_driver(root: str, worktree_config_path: str) -> list[str]:
+def _restore_worktree_changes(
+    root: str, changes: list[tuple[str, str | None]]
+) -> list[WorktreeError]:
+    """Undo one registration changelist: unset added keys, restore migrated ones.
+
+    Args:
+        root: Repository root.
+        changes: Changelist of ``(key, previous value)`` pairs.
+
+    Returns:
+        Every rollback failure, for the caller to aggregate.
+    """
+    rollback_errors: list[WorktreeError] = []
+    for key, previous in reversed(changes):
+        try:
+            if previous is None:
+                _unset_worktree_config(root, key)
+            else:
+                run_git(root, ["config", "--worktree", key, previous])
+        except WorktreeError as rollback_error:
+            rollback_errors.append(rollback_error)
+    return rollback_errors
+
+
+def install_pairing_merge_driver(
+    root: str, worktree_config_path: str
+) -> list[tuple[str, str | None]]:
     """Register the pairing merge driver as worktree-local config.
 
     Args:
@@ -340,13 +368,15 @@ def install_pairing_merge_driver(root: str, worktree_config_path: str) -> list[s
         worktree_config_path: Worktree config file path.
 
     Returns:
-        The keys this call added, for rollback.
+        The ``(key, previous value)`` changes this call made; a ``None``
+        previous value marks an added key, any other the superseded value a
+        migration rewrote, both for rollback.
 
     Raises:
         WorktreeError: When a foreign or conflicting value exists, or when the
             registration could not be rolled back after a failure.
     """
-    added: list[str] = []
+    changes: list[tuple[str, str | None]] = []
     try:
         for key, expected in PAIRING_MERGE_DRIVER_CONFIG:
             entries = included_config_entries(root, worktree_config_path, key)
@@ -375,14 +405,21 @@ def install_pairing_merge_driver(root: str, worktree_config_path: str) -> list[s
                 )
                 raise WorktreeError(msg)
             if existing is not None and existing != expected:
-                msg = (
-                    f"refusing to replace worktree {key} value {existing!r}; remove or "
-                    "integrate the custom pairing merge driver explicitly"
-                )
-                raise WorktreeError(msg)
+                if (
+                    key == "merge.hdsh-pairing.driver"
+                    and existing == LEGACY_PAIRING_MERGE_DRIVER_COMMAND
+                ):
+                    run_git(root, ["config", "--worktree", key, expected])
+                    changes.append((key, existing))
+                else:
+                    msg = (
+                        f"refusing to replace worktree {key} value {existing!r}; remove or "
+                        "integrate the custom pairing merge driver explicitly"
+                    )
+                    raise WorktreeError(msg)
             if existing is None:
                 run_git(root, ["config", "--worktree", key, expected])
-                added.append(key)
+                changes.append((key, None))
             installed = included_config_entries(root, worktree_config_path, key)
             if (
                 len(installed) != 1
@@ -401,12 +438,7 @@ def install_pairing_merge_driver(root: str, worktree_config_path: str) -> list[s
                 msg = f"new worktree-local {key} did not become the effective direct worktree value"
                 raise WorktreeError(msg)
     except Exception as error:
-        rollback_errors: list[WorktreeError] = []
-        for key in reversed(added):
-            try:
-                _unset_worktree_config(root, key)
-            except WorktreeError as rollback_error:
-                rollback_errors.append(rollback_error)
+        rollback_errors = _restore_worktree_changes(root, changes)
         if rollback_errors:
             detail = "; ".join(str(rollback_error) for rollback_error in rollback_errors)
             msg = (
@@ -415,21 +447,21 @@ def install_pairing_merge_driver(root: str, worktree_config_path: str) -> list[s
             )
             raise WorktreeError(msg) from error
         raise
-    return added
+    return changes
 
 
-def rollback_pairing_merge_driver(root: str, added: list[str]) -> None:
-    """Undo one merge-driver registration by unsetting the keys it added.
+def rollback_pairing_merge_driver(root: str, changes: list[tuple[str, str | None]]) -> None:
+    """Undo one merge-driver registration by restoring its changelist.
+
+    Args:
+        root: Repository root.
+        changes: Changelist returned by :func:`install_pairing_merge_driver`;
+            ``None`` previous values are unset, others restored verbatim.
 
     Raises:
-        WorktreeError: When any rollback unset fails.
+        WorktreeError: When any rollback step fails.
     """
-    rollback_errors: list[WorktreeError] = []
-    for key in reversed(added):
-        try:
-            _unset_worktree_config(root, key)
-        except WorktreeError as rollback_error:
-            rollback_errors.append(rollback_error)
+    rollback_errors = _restore_worktree_changes(root, changes)
     if rollback_errors:
         detail = "; ".join(str(rollback_error) for rollback_error in rollback_errors)
         msg = f"pairing merge-driver rollback failed: {detail}"

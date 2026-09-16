@@ -206,10 +206,10 @@ def install(root: str) -> None:
         apply_worktree_config_migration(root, common_config_path, migration)
 
         path_changed = False
-        driver_added: list[str] = []
+        driver_changes: list[tuple[str, str | None]] = []
         try:
             probe_pairing_merge_driver(root)
-            driver_added = install_pairing_merge_driver(root, worktree_config_path)
+            driver_changes = install_pairing_merge_driver(root, worktree_config_path)
             run_git(root, ["config", "--worktree", "core.hooksPath", hooks_path])
             path_changed = worktree_hooks_value != hooks_path
             installed = effective_config_entry(root, "core.hooksPath")
@@ -243,7 +243,7 @@ def install(root: str) -> None:
                 except WorktreeError as rollback_error:
                     rollback_errors.append(rollback_error)
             try:
-                rollback_pairing_merge_driver(root, driver_added)
+                rollback_pairing_merge_driver(root, driver_changes)
             except WorktreeError as rollback_error:
                 rollback_errors.append(rollback_error)
             if rollback_errors:

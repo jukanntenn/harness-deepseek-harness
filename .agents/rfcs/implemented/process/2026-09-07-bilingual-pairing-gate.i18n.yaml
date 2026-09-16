@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/process/2026-09-07-bilingual-pairing-gate.md
-2026-09-07-bilingual-pairing-gate.md: fafd1c9fdd953c48989ba344df0612cedb75b19b
-2026-09-07-bilingual-pairing-gate.zh.md: 3b64a2cc56dc14a54410523816fb8f70a1e848d9
+2026-09-07-bilingual-pairing-gate.md: 0a565c2d88b1746f1057c4bb2bb5c0fba8836ac7
+2026-09-07-bilingual-pairing-gate.zh.md: d1bbb3582e7c97b29d641aa435a1e282c5080de2

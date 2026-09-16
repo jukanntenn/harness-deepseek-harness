@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/feature/2026-09-17-pairing-merge-driver-cli-entry.md
+2026-09-17-pairing-merge-driver-cli-entry.md: bff5928319dc36be01381a64c0257248b89f2be4
+2026-09-17-pairing-merge-driver-cli-entry.zh.md: be880d4cbc6c63a7e202eda2860295c8d2f129a9

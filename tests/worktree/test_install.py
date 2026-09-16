@@ -10,6 +10,10 @@ from typing import Any
 import pytest
 
 from hdsh.worktree import install as worktree_install
+from hdsh.worktree.config import (
+    LEGACY_PAIRING_MERGE_DRIVER_COMMAND,
+    PAIRING_MERGE_DRIVER_COMMAND,
+)
 from hdsh.worktree.git import WorktreeError
 from hdsh.worktree.install import install
 from tests.helpers import Repo, completed_run, git, parse_command
@@ -42,15 +46,52 @@ class TestFreshInstall:
         assert marker["hooksPath"] == hooks
         assert git("config", "--worktree", "core.hooksPath", cwd=repo.root).stdout.strip() == hooks
         assert (
-            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=repo.root)
-            .stdout.strip()
-            .startswith("scripts/pairing-merge-driver.sh")
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=repo.root).stdout.strip()
+            == PAIRING_MERGE_DRIVER_COMMAND
         )
         assert git("config", "extensions.worktreeConfig", cwd=repo.root).stdout.strip() == "true"
 
     def test_reinstall_is_idempotent(self, repo: Repo) -> None:
         install(str(repo.root))
         install(str(repo.root))
+
+    def test_migrates_the_legacy_driver_command(self, repo: Repo) -> None:
+        install(str(repo.root))
+        git(
+            "config",
+            "--worktree",
+            "merge.hdsh-pairing.driver",
+            LEGACY_PAIRING_MERGE_DRIVER_COMMAND,
+            cwd=repo.root,
+        )
+        install(str(repo.root))
+        assert (
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=repo.root).stdout.strip()
+            == PAIRING_MERGE_DRIVER_COMMAND
+        )
+
+    def test_migration_rollback_restores_the_legacy_command(
+        self, repo: Repo, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def failing_prek(root: str) -> None:
+            msg = "prek install --overwrite failed: fixture rejection"
+            raise WorktreeError(msg)
+
+        install(str(repo.root))
+        git(
+            "config",
+            "--worktree",
+            "merge.hdsh-pairing.driver",
+            LEGACY_PAIRING_MERGE_DRIVER_COMMAND,
+            cwd=repo.root,
+        )
+        monkeypatch.setattr(worktree_install, "run_prek", failing_prek)
+        with pytest.raises(WorktreeError, match="fixture rejection"):
+            install(str(repo.root))
+        assert (
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=repo.root).stdout.strip()
+            == LEGACY_PAIRING_MERGE_DRIVER_COMMAND
+        )
 
 
 class TestRefusals:
