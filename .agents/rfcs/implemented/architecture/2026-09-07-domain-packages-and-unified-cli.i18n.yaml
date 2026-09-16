@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/architecture/2026-09-07-domain-packages-and-unified-cli.md
-2026-09-07-domain-packages-and-unified-cli.md: d8d6728491e8a884b86664abb0636f602c69aeb2
-2026-09-07-domain-packages-and-unified-cli.zh.md: 4c26e4b66195e362af92908f51e051f0611d76fd
+2026-09-07-domain-packages-and-unified-cli.md: 3f2923f701ce2060e8d5ca8d0da10cb8bc0e4d67
+2026-09-07-domain-packages-and-unified-cli.zh.md: 8db0af31d73738afe042bf6afc7336cbef8e8116

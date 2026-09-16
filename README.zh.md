@@ -34,7 +34,9 @@ repos:
       # hdsh-scope runs at the manual stage; pass args like [--base, origin/main]
 ```
 
-配对门禁从使用方仓库的 `.hdsh/pairing.manifest.json` 读取语料范围，文档门禁从 `.hdsh/docs.manifest.json` 读取；配对契约与清单规则见 [docs/i18n/README.zh.md](docs/i18n/README.zh.md)。
+两道门禁都从使用方仓库的 `.hdsh/*.manifest.json` 读取语料范围；配对契约与清单规则见 [docs/i18n/README.zh.md](docs/i18n/README.zh.md)。
+
+整套 harness 经 `hdsh adopt` 一键接入；[ADOPT.md](ADOPT.zh.md) 是消费方侧操作手册。
 
 ## 开发
 

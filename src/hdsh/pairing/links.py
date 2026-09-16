@@ -1112,11 +1112,33 @@ def has_language_switcher(markdown: str, accepted_targets: tuple[str, ...] | lis
     return language_switcher_line(markdown, accepted_targets) is not None
 
 
+def _external_pairing_anchor(authored: str) -> str:
+    """Normalize an absolute ``.zh.md`` document URL to its English anchor form.
+
+    Absolute links to a paired document carry a per-side locale suffix (the
+    English side links the ``.md`` URL, the Chinese side the ``.zh.md`` URL,
+    as adoption rewrites upstream references); the structural signature
+    compares them at the pair anchor.
+
+    Args:
+        authored: Destination bytes exactly as authored.
+
+    Returns:
+        The authored URL with the first ``.zh.md`` replaced by ``.md``.
+    """
+    marker = ".zh.md"
+    index = authored.find(marker)
+    if index == -1:
+        return authored
+    return f"{authored[:index]}.md{authored[index + len(marker) :]}"
+
+
 def semantic_link_target(parsed: str, authored: str, context: LinkContext) -> str:
     """Compute the locale-independent semantic target of one link destination.
 
     Corpus links normalize to ``hdsh-pairing-target:<english-path><suffix>``
-    with the suffix exactly as authored; every other destination keeps its
+    with the suffix exactly as authored; absolute ``.zh.md`` document URLs
+    normalize to their ``.md`` anchor form; every other destination keeps its
     authored bytes.
 
     Args:
@@ -1128,7 +1150,7 @@ def semantic_link_target(parsed: str, authored: str, context: LinkContext) -> st
         The semantic target used by the structural signature.
     """
     if is_external_or_absolute_markdown_url(parsed):
-        return authored
+        return _external_pairing_anchor(authored)
     resolved = _resolve_link(parsed, context, authored)
     if resolved is None:
         return authored

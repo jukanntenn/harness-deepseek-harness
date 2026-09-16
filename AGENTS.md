@@ -23,6 +23,9 @@ uv run hdsh docs links                # relative links and #fragment anchors res
 uv run hdsh docs budgets              # standing-doc word ceilings (--list reports usage)
 uv run hdsh scope --base <ref>        # committed + worktree scope of a change
 uv run hdsh worktree install          # worktree-local prek hooks and merge driver
+uv run hdsh adopt plan <params>       # preflight a consumer adoption (see ADOPT.md)
+uv run hdsh adopt apply <params>      # install the harness into a consumer repository
+uv run hdsh adopt verify              # consumer-side drift and placeholder check
 uv run prek run --all-files                      # every hook over the whole tree
 ```
 

@@ -26,6 +26,11 @@ Gate configuration mirrors the domains: pairing reads `.hdsh/pairing.manifest.js
 | [`policy/`](../src/hdsh/policy/) | GitHub Issue/PR policy engine: rules, client, lifecycle commands | `hdsh policy` |
 | [`worktree/`](../src/hdsh/worktree/) | Worktree-local prek hook and merge-driver installation | `hdsh worktree install` |
 | [`scope.py`](../src/hdsh/scope.py) | Committed-plus-worktree scope report of an outgoing change | `hdsh scope` |
+| [`adopt/`](../src/hdsh/adopt/) | Consumer adoption: the mirrored corpus, templates, and the adopt manifest | `hdsh adopt plan/apply/verify` |
+
+## Adopt
+
+The adopt domain installs the harness into a consumer repository: mirrors and templates ship as package data (an executed gate proves the mirrors byte-equal the live files), adoption is preflight-then-write with one diagnostic per blocker, and the adopt manifest owns upgrades — digests for upstream-owned files, a placeholder census for the consumer-completable ones. [ADOPT.md](../ADOPT.md) is the consumer-side manual; the decisions live in the [adopt RFC](../.agents/rfcs/implemented/feature/2026-09-17-hdsh-adopt-and-templates.md).
 
 ## Pairing
 
