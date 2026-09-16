@@ -1,0 +1,72 @@
+# Composite action behind the consumer-facing Issue policy gate: everything
+# except the event triggers, the minimal permissions block, and the credential
+# mapping lives here, so consumers upgrade by moving one `uses:` ref. Policy
+# semantics stay in the engine and the repository's config.json — never in
+# workflow inputs, which a pull request could edit for itself.
+name: hdsh issue policy
+description: Validate a pull request against the repository's checked-in issue policy (trusted default-branch config).
+inputs:
+  github-token:
+    description: Repository read token for REST pulls.
+    default: ${{ github.token }}
+  project-token:
+    description: Project (GraphQL) read token; required when config accountType is user.
+    default: ""
+  app-client-id:
+    description: GitHub App client ID; required when config accountType is organization.
+    default: ""
+  app-private-key:
+    description: GitHub App private key; required when config accountType is organization.
+    default: ""
+  config-path:
+    description: Policy config path on the repository default branch.
+    default: .github/issue-management/config.json
+  hdsh-ref:
+    description: git ref (tag or full SHA) of harness-deepseek-harness that provides the engine.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check out trusted policy
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ github.event.repository.default_branch }}
+        persist-credentials: false
+    - name: Install uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      with:
+        python-version: "3.13"
+    - name: Resolve deployment flavor and credentials
+      # The checked-out config decides which credential flavor must exist;
+      # the later `||` selections are proven by this step, not silent defaults.
+      id: flavor
+      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
+      shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config-path }}
+        PROJECT_TOKEN: ${{ inputs.project-token }}
+        APP_CLIENT_ID: ${{ inputs.app-client-id }}
+        APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
+      run: ${{ github.action_path }}/scripts/flavor.sh "Issue policy"
+    - name: Create Project read token
+      id: app-token
+      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.account-type == 'organization' }}
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
+      with:
+        client-id: ${{ inputs.app-client-id }}
+        private-key: ${{ inputs.app-private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-issues: read
+        permission-organization-projects: read
+    - name: Validate pull request
+      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PROJECT_TOKEN: ${{ steps.app-token.outputs.token || inputs.project-token }}
+        CONFIG_PATH: ${{ inputs.config-path }}
+        HDSH_REF: ${{ inputs.hdsh-ref }}
+        REPOSITORY_URL: ${{ github.event.repository.clone_url }}
+      run: |
+        uv tool run --from "harness-deepseek-harness @ git+${REPOSITORY_URL}@${HDSH_REF}" hdsh policy pr --config "$CONFIG_PATH"

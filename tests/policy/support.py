@@ -25,6 +25,18 @@ CONFIG_JSON = {
 CONFIG = PolicyConfig.from_json(json.dumps(CONFIG_JSON))
 USER_CONFIG = PolicyConfig.from_json(json.dumps({**CONFIG_JSON, "accountType": "user"}))
 
+REPOSITORY_CONTEXT: dict[str, Any] = {
+    "repository": {
+        "name": "hdsh",
+        "owner": {"login": "hdsh", "type": "Organization"},
+    }
+}
+
+
+def event_with(**payload: Any) -> dict[str, Any]:
+    """An event payload carrying the config-matching repository context."""
+    return {**REPOSITORY_CONTEXT, **payload}
+
 
 def config_with(**overrides: Any) -> str:
     """The canonical policy config JSON with per-test overrides."""
