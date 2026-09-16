@@ -9,9 +9,13 @@ from hdsh.pairing.manifest import PairingManifest, manifest_excluded
 
 _README_ARTIFACT = re.compile(r"(?:^|/)readme(?:\.md|\.zh\.md|\.i18n\.yaml)$", re.IGNORECASE)
 _ROOT_PAIRED_DOCUMENT_ARTIFACT = re.compile(
-    r"^(?:brand_guidelines|contributing|safety)(?:\.md|\.zh\.md|\.i18n\.yaml)$",
+    r"^(?:adopt|brand_guidelines|contributing|safety)(?:\.md|\.zh\.md|\.i18n\.yaml)?$",
     re.IGNORECASE,
 )
+#: Packaged adoption mirrors are distribution data, not repository prose; like
+#: the frozen archive they are a discovery exclusion rather than manifest
+#: entries, because they carry the mirrored language files by design.
+_PACKAGED_DATA_PREFIXES = ("src/hdsh/adopt/templates/mirrors/",)
 _NON_SOURCE_DIRECTORIES = frozenset(
     {
         "node_modules",
@@ -50,6 +54,7 @@ def is_scope_file(file: str) -> bool:
     """
     return (
         not file.startswith(".agents/rfcs/archived/")
+        and not file.startswith(_PACKAGED_DATA_PREFIXES)
         and not _is_excluded_path(file)
         and (
             _README_ARTIFACT.search(file) is not None

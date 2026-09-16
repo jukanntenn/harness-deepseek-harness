@@ -20,9 +20,19 @@ class TestScope:
         assert not is_scope_file(".local/contexts/prek/README.md")
         assert not is_scope_file("src/hdsh/__init__.py")
 
+    def test_packaged_adoption_mirrors_are_discovery_exclusions(self) -> None:
+        assert not is_scope_file("src/hdsh/adopt/templates/mirrors/.agents/rfcs/README.md")
+        assert not is_scope_file("src/hdsh/adopt/templates/mirrors/.agents/rfcs/README.zh.md")
+        assert not is_scope_file("src/hdsh/adopt/templates/mirrors/docs/i18n/README.md")
+        assert not is_scope_file("src/hdsh/adopt/templates/mirrors/docs/cookbook/a-stack.md")
+
     def test_root_paired_documents(self) -> None:
         assert is_scope_file("CONTRIBUTING.md")
         assert is_scope_file("safety.zh.md")
+        assert is_scope_file("ADOPT.md")
+        assert is_scope_file("adopt.zh.md")
+        assert is_scope_file("ADOPT.i18n.yaml")
+        assert not is_scope_file("packages/ADOPT.md")
         assert not is_scope_file("CONTRIBUTING-notes.md")
         assert is_scope_file("docs/CONTRIBUTING-notes.md")
 
@@ -42,6 +52,9 @@ class TestScopeMatrix:
             "CONTRIBUTING.md",
             "CONTRIBUTING.zh.md",
             "CONTRIBUTING.i18n.yaml",
+            "ADOPT.md",
+            "ADOPT.zh.md",
+            "ADOPT.i18n.yaml",
             "BRAND_GUIDELINES.md",
             "BRAND_GUIDELINES.zh.md",
             "BRAND_GUIDELINES.i18n.yaml",
