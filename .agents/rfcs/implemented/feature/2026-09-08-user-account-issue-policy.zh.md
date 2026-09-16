@@ -24,7 +24,7 @@ Project 查询同时声明两个顶层入口——`organization(login: $owner) @
 
 ### 凭据跟随形态
 
-组织部署不变：一个 GitHub App（Issues 与 Pull requests 读写、组织 Projects 读写）为政策工作流铸造 Project 读令牌，为生命周期工作流铸造 REST 加 GraphQL 令牌。个人部署无法授予 App Project 访问权，因此 REST——含审计评论——走 `github.token`（marker 查找本就期待的 `github-actions[bot]` 身份），ProjectV2 GraphQL 走只带 `project` scope 的 classic PAT，以 `HDSH_PROJECT_PAT` 存储、由专职机器账号（machine account）持有。每个工作流从检出的 `config.json` 解析形态，匹配的凭据缺失时以点名错误显性失败；后续 `||` 令牌选择由该解析步骤证明，不是静默兜底。
+组织部署不变：一个 GitHub App（Issues 与 Pull requests 读写、组织 Projects 读写）为政策工作流铸造 Project 读令牌，为生命周期工作流铸造 REST 加 GraphQL 令牌。个人部署无法授予 App Project 访问权，因此 REST——含审计评论——走 `github.token`（marker 查找本就期待的 `github-actions[bot]` 身份），ProjectV2 GraphQL 走只带 `project` scope 的 classic PAT，以 `HDSH_ISSUE_PROJECT_TOKEN` 存储、由专职机器账号（machine account）持有。每个工作流从检出的 `config.json` 解析形态，匹配的凭据缺失时以点名错误显性失败；后续 `||` 令牌选择由该解析步骤证明，不是静默兜底。
 
 ### 身份模型
 

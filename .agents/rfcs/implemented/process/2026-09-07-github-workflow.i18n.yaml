@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/process/2026-09-07-github-workflow.md
-2026-09-07-github-workflow.md: 6cee66ad36d09cb1845a69bcc721103d8a19c5e9
-2026-09-07-github-workflow.zh.md: a996e05d1ca0fa63cbd2c67be81a143950b20ec5
+2026-09-07-github-workflow.md: 19a35cd05f771acd658358cfa4655736df966fa0
+2026-09-07-github-workflow.zh.md: 7c5a9558a83d8e3aafd556ab24325d2da56b42ea
