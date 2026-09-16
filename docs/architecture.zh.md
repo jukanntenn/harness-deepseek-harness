@@ -26,6 +26,11 @@ hdsh 把治理门禁打包给 Python 生态：GitHub Issue/PR 策略、双语文
 | [`policy/`](../src/hdsh/policy/) | GitHub Issue/PR 策略引擎：规则、客户端、生命周期命令 | `hdsh policy` |
 | [`worktree/`](../src/hdsh/worktree/) | worktree 本地 prek 钩子与合并驱动安装 | `hdsh worktree install` |
 | [`scope.py`](../src/hdsh/scope.py) | 一次变更的已提交加 worktree 范围报告 | `hdsh scope` |
+| [`adopt/`](../src/hdsh/adopt/) | 消费方接入：镜像语料、模板与 adopt manifest | `hdsh adopt plan/apply/verify` |
+
+## 接入
+
+adopt 域把 harness 安装进消费方仓库：镜像与模板作为包数据分发（一道执行级门禁证明镜像与活文件逐字节相等），接入先预检后落盘、每个阻塞一条诊断，adopt manifest 持有升级——上游持有文件查摘要，消费方可补全文件清点占位符。[ADOPT.md](../ADOPT.zh.md) 是消费方侧手册；决策见[接入 RFC](../.agents/rfcs/implemented/feature/2026-09-17-hdsh-adopt-and-templates.zh.md)。
 
 ## Pairing
 

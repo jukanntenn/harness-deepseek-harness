@@ -12,7 +12,7 @@ Status: implemented
 
 `src/hdsh/` 按领域组织，且一个概念在三层只用一个名字：目录、CLI 域、prek hook id 前缀。
 
-- 领域包为 `pairing/`、`docs/`、`rfc/`、`scope.py`、`policy/`、`worktree/`；包内按概念拆分模块——`pairing/{manifest,corpus,records,links,structure,git,verify,merge}`、`policy/{config,rules,client,commands}`、`worktree/{git,ownership,config,install}`、`docs/{config,corpus,markdown,wrap,links,budgets}`。
+- 领域包为 `pairing/`、`docs/`、`rfc/`、`scope.py`、`policy/`、`worktree/`；包内按概念拆分模块——`pairing/{manifest,corpus,records,links,structure,git,verify,merge}`、`policy/{config,rules,client,commands}`、`worktree/{git,ownership,config,install}`、`docs/{config,corpus,markdown,wrap,links,budgets}`、`adopt/{corpus,manifest,commands}`。
 - 只保留一个控制台脚本——`hdsh`（`hdsh.cli:main`，另有 `python -m hdsh`）；`cli.py` 持有两级 argparse 子命令树 `hdsh <domain> <command>`，每一层都有渐进披露的 `--help`，各域包注册自己的命令叶子解析器并保留各自的语义校验与报错（例如 pairing 的"显式批量重录"规则），语法错误以 `ValueError`、已处理的 help 以信号浮出（经 `hdsh.cliargs`），处理器返回整数退出码，`SystemExit` 只出现在进程入口与 git 边界助手。
 - Hook id 遵循同一规则：`hdsh-pairing-verify`、`hdsh-rfc-verify`、`hdsh-scope`（manual 阶段）、`hdsh-docs-wrap`、`hdsh-docs-links`、`hdsh-docs-budgets`；manifest entry 直接调用子命令（`entry: hdsh pairing verify`），保持与上游 pre-commit 兼容。
 - 门禁配置文件同样镜像领域——`.hdsh/pairing.manifest.json` 与 `.hdsh/docs.manifest.json`——合并驱动为 `merge.hdsh-pairing`，由 `hdsh pairing merge-driver` CLI 入口承载；worktree 安装器负责注册两者。
