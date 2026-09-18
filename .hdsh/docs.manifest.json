@@ -6,7 +6,9 @@
       "AGENTS.md",
       "docs/**/*.md",
       ".agents/rfcs/**/*.md",
-      ".agents/skills/**/*.md"
+      ".agents/skills/**/*.md",
+      "ADOPT.md",
+      "ADOPT.zh.md"
     ],
     "exclude": [
       ".agents/rfcs/archived/**"
@@ -19,7 +21,9 @@
       "AGENTS.md",
       "docs/**/*.md",
       ".agents/rfcs/**/*.md",
-      ".agents/skills/**/*.md"
+      ".agents/skills/**/*.md",
+      "ADOPT.md",
+      "ADOPT.zh.md"
     ],
     "exclude": [
       ".agents/rfcs/archived/**"
@@ -39,6 +43,8 @@
     "docs/architecture.md": 1000,
     "docs/architecture.zh.md": 400,
     "docs/development.md": 650,
-    "docs/development.zh.md": 250
+    "docs/development.zh.md": 250,
+    "ADOPT.md": 470,
+    "ADOPT.zh.md": 190
   }
 }

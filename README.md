@@ -34,7 +34,9 @@ repos:
       # hdsh-scope runs at the manual stage; pass args like [--base, origin/main]
 ```
 
-The pairing gate reads its corpus scope from `.hdsh/pairing.manifest.json` and the documentation gates read theirs from `.hdsh/docs.manifest.json` in the consuming repository; see [docs/i18n/README.md](docs/i18n/README.md) for the pairing contract and the manifest rules.
+Both gates read their corpus from the consuming repository's `.hdsh/*.manifest.json`; see [docs/i18n/README.md](docs/i18n/README.md) for the pairing contract and the manifest rules.
+
+The whole harness installs with `hdsh adopt`; [ADOPT.md](ADOPT.md) is the consumer-side operating manual.
 
 ## Development
 

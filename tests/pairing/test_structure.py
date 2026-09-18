@@ -148,6 +148,13 @@ class TestSignatureLinkSemantics:
         )
         assert structure_diff(escaped, literal) == [message]
 
+    def test_absolute_zh_document_urls_compare_at_the_english_anchor(self) -> None:
+        english = self._signature("[Rules](https://github.com/o/r/blob/v1/docs/rules.md#x)\n")
+        chinese = self._signature("[Rules](https://github.com/o/r/blob/v1/docs/rules.zh.md#x)\n")
+        assert english.links == ["https://github.com/o/r/blob/v1/docs/rules.md#x"]
+        assert chinese.links == ["https://github.com/o/r/blob/v1/docs/rules.md#x"]
+        assert structure_diff(english, chinese) == []
+
     def test_angle_autolink_enters_the_signature(self) -> None:
         markdown = "<https://example.com/reference.md>\n"
         assert self._signature(markdown).links == ["https://example.com/reference.md"]

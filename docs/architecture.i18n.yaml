@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record docs/architecture.md
-architecture.md: f30b73b9a55f531485392bc6606edb1325de60b7
-architecture.zh.md: 48bfefc659b1d3d007ca52b05c52747bfb4533ef
+architecture.md: 40b514fd5413d4f09bb665e40edbd6a7f9f6fae5
+architecture.zh.md: fd888cd9ecd48137d81d1e127f12c062e4a69a82

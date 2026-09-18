@@ -1,0 +1,32 @@
+{
+  "markdownWrap": {
+    "include": [
+      "README.md",
+      "AGENTS.md",
+      "docs/**/*.md",
+      ".agents/rfcs/**/*.md",
+      ".agents/skills/**/*.md"
+    ],
+    "exclude": [
+      ".agents/rfcs/archived/**"
+    ]
+  },
+  "markdownLinks": {
+    "include": [
+      "README.md",
+      "AGENTS.md",
+      "docs/**/*.md",
+      ".agents/rfcs/**/*.md",
+      ".agents/skills/**/*.md"
+    ],
+    "exclude": [
+      ".agents/rfcs/archived/**"
+    ]
+  },
+  "docBudgets": {
+    "docs/architecture.md": 400,
+    "docs/architecture.zh.md": 250,
+    "docs/development.md": 300,
+    "docs/development.zh.md": 200
+  }
+}
