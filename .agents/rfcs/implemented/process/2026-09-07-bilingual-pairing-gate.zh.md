@@ -30,7 +30,7 @@ Status: implemented
 
 ### 记录在合并时以 fail-closed 的方式组合
 
-`.gitattributes` 把 `*.i18n.yaml` 路由到 `hdsh-pairing` 合并驱动，该驱动由 `hdsh worktree install` 以 `scripts/pairing-merge-driver.sh %O %A %B %P` 按 worktree 本地注册，并启动 `hdsh pairing merge`。驱动读取祖先、当前和对方记录，从 Git 对象库加载每份记录所记的两个所属 blob，并核对每个 blob 的内容与其记录的 hash。它对英文与中文所属文件各自独立运行 Git 默认的文本合并；若任一侧存在内容冲突，或合并后的文档丢失必需的切换行、违反链接语言或结构分歧，驱动即失败并保留普通冲突。成功时它把合并后的所属文件存为 blob、钉在快照引用命名空间下、写出组合后的记录并以 0 退出，Git 据此解析该路径。运行时不可用时（`--probe` 报告可用性），shell 启动器降级为纯文本合并并以 1 退出，Git 因而保持索引阶段未解析；未经核实的干净文本合并绝不算作已解析的配对记录。
+`.gitattributes` 把 `*.i18n.yaml` 路由到 `hdsh-pairing` 合并驱动，该驱动由 `hdsh worktree install` 以 `uv run --no-sync hdsh pairing merge-driver %O %A %B %P` 按 worktree 本地注册，这个 CLI 入口吸收了原先的 shell 启动器。驱动读取祖先、当前和对方记录，从 Git 对象库加载每份记录所记的两个所属 blob，并核对每个 blob 的内容与其记录的 hash。它对英文与中文所属文件各自独立运行 Git 默认的文本合并；若任一侧存在内容冲突，或合并后的文档丢失必需的切换行、违反链接语言或结构分歧，驱动即失败并保留普通冲突。成功时它把合并后的所属文件存为 blob、钉在快照引用命名空间下、写出组合后的记录并以 0 退出，Git 据此解析该路径。组合失败时，该入口在记录文件里写入普通文本冲突，打印恢复指引，并以非零退出让 Git 保持索引阶段未解析；运行时本身未同步时驱动命令直接失败，Git 以驱动错误停止合并（`--probe` 报告可用性）。未经核实的干净文本合并绝不算作已解析的配对记录。
 
 `hdsh pairing merge --resolve` 在合并已经停下之后执行同样的 fail-closed 操作：它解析每个可机械组合的侧车冲突，把记录作为一批暂存，证明暂存的所属文件合并与组合结果一致且worktree 字节没有未暂存改动，拒绝覆盖已被编辑的冲突内容，并以失败退出并列出仍需手工处理的内容。
 

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from hdsh.worktree.config import PAIRING_MERGE_DRIVER_COMMAND
 from hdsh.worktree.git import WorktreeError
 from hdsh.worktree.install import install
 from tests.helpers import git
@@ -154,14 +155,12 @@ class TestIsolation:
             git("config", "--worktree", "core.hooksPath", cwd=linked).stdout.strip() == linked_hooks
         )
         assert (
-            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=main)
-            .stdout.strip()
-            .startswith("scripts/pairing-merge-driver.sh")
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=main).stdout.strip()
+            == PAIRING_MERGE_DRIVER_COMMAND
         )
         assert (
-            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=linked)
-            .stdout.strip()
-            .startswith("scripts/pairing-merge-driver.sh")
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=linked).stdout.strip()
+            == PAIRING_MERGE_DRIVER_COMMAND
         )
         main_hook = (Path(main_hooks) / "pre-commit").read_text(encoding="utf-8")
         linked_hook = (Path(linked_hooks) / "pre-commit").read_text(encoding="utf-8")

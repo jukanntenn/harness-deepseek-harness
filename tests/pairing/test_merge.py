@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import subprocess
 import sys
 from collections.abc import Callable
@@ -16,6 +15,7 @@ import hdsh.pairing.verify as verify_module
 from hdsh.pairing.git import GitError, blob_hash
 from hdsh.pairing.merge import (
     PairingMergeResult,
+    driver_main,
     merge_records,
     pairing_source,
     resolve_conflicts,
@@ -25,13 +25,13 @@ from hdsh.pairing.merge import (
 )
 from hdsh.pairing.records import PairingRecord, pair_paths, parse_record, render_record
 from hdsh.pairing.verify import record_request, run_gate, verify_request
+from hdsh.worktree.config import PAIRING_MERGE_DRIVER_COMMAND
 from tests.helpers import Repo, en_pair, git, parse_command, write_pair, zh_pair
 
 ANCHOR = "docs/guide.md"
 META = "docs/guide.i18n.yaml"
 MANUAL_ANCHOR = "docs/manual.md"
 MANUAL_META = "docs/manual.i18n.yaml"
-DRIVER = Path(__file__).resolve().parents[2] / "scripts" / "pairing-merge-driver.sh"
 
 
 def gate_write(repo: Repo, anchor: str = ANCHOR) -> None:
@@ -49,6 +49,11 @@ def gate_check(repo: Repo, anchor: str) -> int:
 def merge_cli(*args: str) -> int:
     """Run ``hdsh pairing merge`` with parsed arguments."""
     return merge_main(parse_command(merge_module.register, ["merge", *args]))
+
+
+def driver_cli(*args: str) -> int:
+    """Run ``hdsh pairing merge-driver`` with parsed arguments."""
+    return driver_main(parse_command(merge_module.register_driver, ["merge-driver", *args]))
 
 
 def build_divergent_pair(repo: Repo) -> dict[str, str]:
@@ -359,25 +364,51 @@ class TestMergeCli:
 
     def test_unknown_flags_are_rejected(self) -> None:
         with pytest.raises(ValueError, match="unrecognized arguments"):
-            merge_cli("--bogus", "a")
+            merge_cli("--bogus")
+
+    def test_stray_positionals_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="unrecognized arguments"):
+            merge_cli("a", "b", "c")
 
     def test_missing_mode_is_a_usage_error(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert merge_cli() == 2
         assert "hdsh pairing merge: usage:" in capsys.readouterr().err
 
-    def test_wrong_driver_arity_is_a_usage_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        assert merge_cli("a", "b", "c") == 2
+    def test_both_modes_together_is_a_usage_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert merge_cli("--probe", "--resolve") == 2
         assert "hdsh pairing merge: usage:" in capsys.readouterr().err
 
-    def test_driver_form_with_unreadable_paths_fails(
-        self, capsys: pytest.CaptureFixture[str]
+    def test_resolve_failure_reports_the_recovery_pointer(
+        self, repo: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        assert merge_cli("gone-ancestor", "gone-current", "gone-other", "gone-meta") == 1
-        captured = capsys.readouterr()
-        assert "hdsh pairing merge:" in captured.err
-        assert "rerun `hdsh pairing merge --resolve`" in captured.err
+        write_pair(repo, ANCHOR)
+        gate_write(repo)
+        repo.commit("base")
+        git("branch", "side", cwd=repo.root)
+        repo.write(ANCHOR, en_pair("guide.zh.md").replace("Body paragraph.", "Main rewrote it."))
+        repo.write("docs/guide.zh.md", zh_pair("guide.md").replace("正文段落。", "主分支改写。"))
+        gate_write(repo)
+        repo.commit("main edits the paragraph")
+        git("checkout", "side", cwd=repo.root)
+        repo.write(ANCHOR, en_pair("guide.zh.md").replace("Body paragraph.", "SIDE rewrote it."))
+        repo.write("docs/guide.zh.md", zh_pair("guide.md").replace("正文段落。", "侧分支改写。"))
+        gate_write(repo)
+        repo.commit("side edits the same paragraph")
+        git("checkout", "main", cwd=repo.root)
+        assert git("merge", "side", cwd=repo.root, check=False).returncode != 0
+        exit_code = _in_repo(repo, lambda: merge_cli("--resolve"))
+        assert exit_code == 1
+        error = capsys.readouterr().err
+        assert "content conflicts" in error
+        assert "rerun `hdsh pairing merge --resolve`" in error
 
-    def test_driver_mode_writes_composed_record(self, repo: Repo, tmp_path: Path) -> None:
+
+class TestMergeDriverCli:
+    def test_wrong_arity_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="PATH"):
+            driver_cli("a", "b", "c")
+
+    def test_writes_composed_record(self, repo: Repo, tmp_path: Path) -> None:
         build_divergent_pair(repo)
         start_conflicted_merge(repo)
         ancestor = tmp_path / "ancestor"
@@ -386,20 +417,71 @@ class TestMergeCli:
         ancestor.write_text(stage_text(repo, "1"), encoding="utf-8")
         current.write_text(stage_text(repo, "2"), encoding="utf-8")
         other.write_text(stage_text(repo, "3"), encoding="utf-8")
-        _in_repo(
+        exit_code = _in_repo(
             repo,
-            lambda: merge_cli(str(ancestor), str(current), str(other), META),
+            lambda: driver_cli(str(ancestor), str(current), str(other), META),
         )
+        assert exit_code == 0
         record = parse_record(current.read_text(encoding="utf-8"), pair_paths(ANCHOR))
         assert record is not None
 
+    def test_unreadable_paths_fail_and_report_the_fallback(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert driver_cli("gone-ancestor", "gone-current", "gone-other", "gone-meta") == 1
+        captured = capsys.readouterr()
+        assert "hdsh pairing merge:" in captured.err
+        assert "text conflict fallback failed with status" in captured.err
+        assert "left an ordinary text conflict in gone-meta" in captured.err
 
-def _in_repo(repo: Repo, action: Callable[[], object]) -> None:
+    def test_missing_git_reports_the_fallback_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        ancestor = tmp_path / "ancestor"
+        current = tmp_path / "current"
+        other = tmp_path / "other"
+        for path, filler in ((ancestor, "0"), (current, "1"), (other, "2")):
+            path.write_text(f"guide.md: {filler * 40}\nguide.zh.md: {'f' * 40}\n", encoding="utf-8")
+        monkeypatch.setenv("PATH", "")
+        assert driver_cli(str(ancestor), str(current), str(other), META) == 1
+        captured = capsys.readouterr()
+        assert "text conflict fallback failed:" in captured.err
+        assert "left an ordinary text conflict" in captured.err
+
+    def test_fallback_writes_ordinary_text_conflict(
+        self, repo: Repo, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        write_pair(repo, ANCHOR)
+        gate_write(repo)
+        ancestor = tmp_path / "ancestor"
+        current = tmp_path / "current"
+        other = tmp_path / "other"
+        ancestor.write_text((repo.root / META).read_text(encoding="utf-8"), encoding="utf-8")
+        current.write_text(f"guide.md: {'0' * 40}\nguide.zh.md: {'1' * 40}\n", encoding="utf-8")
+        other.write_text(f"guide.md: {'2' * 40}\nguide.zh.md: {'3' * 40}\n", encoding="utf-8")
+        exit_code = _in_repo(
+            repo,
+            lambda: driver_cli(str(ancestor), str(current), str(other), META),
+        )
+        assert exit_code == 1
+        conflicted = current.read_text(encoding="utf-8")
+        assert "<<<<<<< docs/guide.i18n.yaml:current" in conflicted
+        assert f"guide.md: {'0' * 40}" in conflicted
+        assert f"guide.md: {'2' * 40}" in conflicted
+        captured = capsys.readouterr()
+        assert "left an ordinary text conflict" in captured.err
+        assert "git merge --abort" in captured.err
+
+
+def _in_repo(repo: Repo, action: Callable[[], object]) -> object:
     """Run one callable with the process cwd inside the repository."""
     previous = str(Path.cwd())
     os.chdir(repo.root)
     try:
-        action()
+        return action()
     finally:
         os.chdir(previous)
 
@@ -424,20 +506,20 @@ def _fake_uv_bin(root: Path, script: str) -> Path:
 def _runtime_uv_bin(root: Path) -> Path:
     """One PATH directory whose ``uv`` forwards to the real hdsh console module.
 
-    The driver script probes and executes ``uv run --no-sync hdsh …``; the
-    shim drops those three leading arguments and runs ``python -m hdsh`` with
-    the rest, so the shell script, the real CLI, and real git all execute —
-    only the environment linkage is synthetic.
+    The registered driver executes ``uv run --no-sync hdsh pairing
+    merge-driver …``; the shim drops those three leading arguments and runs
+    ``python -m hdsh`` with the rest, so the real CLI and real git all
+    execute — only the environment linkage is synthetic.
     """
     return _fake_uv_bin(root, f'#!/bin/sh\nshift 3\nexec "{sys.executable}" -m hdsh "$@"\n')
 
 
 def _install_driver(repo: Repo, runtime_bin: Path) -> dict[str, str]:
-    """Register the shipped driver for ``*.i18n.yaml`` and return the env."""
+    """Register the installed driver command for ``*.i18n.yaml`` and return the env."""
     git(
         "config",
         "merge.hdsh-pairing.driver",
-        f"{shlex.quote(str(DRIVER))} %O %A %B %P",
+        PAIRING_MERGE_DRIVER_COMMAND,
         cwd=repo.root,
     )
     return _merge_env(runtime_bin)
@@ -945,14 +1027,62 @@ class TestMergeGuardBranches:
         assert resolved == [META]
 
 
-class TestPairingMergeDriver:
-    """The shipped ``scripts/pairing-merge-driver.sh`` under real git merges.
+def build_structurally_divergent_pair(repo: Repo, *, separator: bool = False) -> None:
+    """Create a base pair and two branches whose owners merge cleanly but diverge.
 
-    Integration cases: the registered driver composes and
-    commits through a working runtime, sees merge-head-only link targets,
-    leaves an ordinary text conflict when the runtime is unavailable, keeps a
-    clean text fallback unresolved, survives a pre-merge-commit rejection,
-    and resolves safe pairs while aggregating owner conflicts.
+    The main branch appends an English section with a heading; the side branch
+    appends a Chinese paragraph without one. Both owner merges stay clean while
+    the merged pair's heading counts diverge, so the repository-aware resolver
+    must refuse to compose and the driver degrades to a text merge of the
+    records — markers without the separator, a clean but unverified record
+    with it.
+
+    Args:
+        repo: Fixture repository.
+        separator: Insert a stable comment separator between the record's two
+            hash lines so the degraded record text merge stays clean.
+    """
+
+    def commit(source: str, zh: str, message: str) -> None:
+        repo.write(ANCHOR, source)
+        repo.write("docs/guide.zh.md", zh)
+        gate_write(repo)
+        if separator:
+            meta = repo.root / META
+            meta.write_text(
+                meta.read_text(encoding="utf-8").replace(
+                    "\nguide.zh.md:",
+                    "\n# Stable separator for independent line merges.\nguide.zh.md:",
+                ),
+                encoding="utf-8",
+            )
+        repo.commit(message)
+
+    commit(en_pair("guide.zh.md"), zh_pair("guide.md"), "base")
+    git("branch", "side", cwd=repo.root)
+    commit(
+        en_pair("guide.zh.md") + "\n## Main adds a section\n\nText.\n",
+        zh_pair("guide.md"),
+        "main adds an English section",
+    )
+    git("checkout", "side", cwd=repo.root)
+    commit(
+        en_pair("guide.zh.md"),
+        zh_pair("guide.md") + "\n侧分支新增一段。\n",
+        "side adds a Chinese paragraph",
+    )
+    git("checkout", "main", cwd=repo.root)
+
+
+class TestPairingMergeDriver:
+    """The registered ``hdsh pairing merge-driver`` command under real git merges.
+
+    Integration cases: the registered driver composes and commits through a
+    working runtime, sees merge-head-only link targets, degrades to an
+    ordinary text conflict when the runtime is unavailable or composition
+    fails, keeps a clean degraded text merge unresolved until confirmed,
+    survives a pre-merge-commit rejection, and resolves safe pairs while
+    aggregating owner conflicts.
     """
 
     def _setup_attributes(self, repo: Repo) -> None:
@@ -1018,72 +1148,45 @@ class TestPairingMergeDriver:
         merge = _git_merge(repo, "main", env)
 
         assert merge.returncode == 1
-        assert "runtime is unavailable; leaving an ordinary text conflict" in merge.stderr
         assert git("rev-parse", "HEAD", cwd=repo.root).stdout.strip() == head_before
         assert git("rev-parse", "--verify", "MERGE_HEAD", cwd=repo.root).stdout.strip() != ""
         assert git("diff", "--name-only", "--diff-filter=U", cwd=repo.root).stdout.strip() == META
         stages = git("ls-files", "--unmerged", "--", META, cwd=repo.root).stdout
         assert len([line for line in stages.split("\n") if line]) == 3
-        conflicted = (repo.root / META).read_text(encoding="utf-8")
-        assert "<<<<<<< docs/guide.i18n.yaml:current" in conflicted
-        for stage in ("2", "3"):
-            for line in stage_text(repo, stage).split("\n"):
-                if line and not line.startswith("#"):
-                    assert line in conflicted
+        assert "<<<<<<<" not in (repo.root / META).read_text(encoding="utf-8")
         assert resolve_conflicts(
             str(repo.root), pairing_source(str(repo.root)), generated=(), public_blob_root=""
         ) == [META]
         _expect_merged_pair(repo)
 
-    def test_probe_failure_is_not_rescued_by_unrelated_runtime_success(
+    def test_composition_failure_leaves_ordinary_text_conflict(
         self, repo: Repo, tmp_path: Path
     ) -> None:
         self._setup_attributes(repo)
-        build_divergent_pair(repo)
-        script = (
-            "#!/bin/sh\n"
-            'for argument in "$@"; do\n'
-            '  if [ "$argument" = "--version" ]; then exit 0; fi\n'
-            "done\n"
-            "exit 72\n"
-        )
-        env = _install_driver(repo, _fake_uv_bin(tmp_path, script))
+        build_structurally_divergent_pair(repo)
+        env = _install_driver(repo, _runtime_uv_bin(tmp_path))
 
-        merge = _git_merge(repo, "main", env)
+        merge = _git_merge(repo, "side", env)
 
         assert merge.returncode == 1
-        assert "runtime is unavailable" in merge.stderr
-        assert "<<<<<<< docs/guide.i18n.yaml:current" in (repo.root / META).read_text(
-            encoding="utf-8"
-        )
+        assert _unmerged_paths(repo) == {META}
+        conflicted = (repo.root / META).read_text(encoding="utf-8")
+        assert "<<<<<<< docs/guide.i18n.yaml:current" in conflicted
+        assert "## Main adds a section" in (repo.root / ANCHOR).read_text(encoding="utf-8")
+        assert "侧分支新增一段。" in (repo.root / "docs/guide.zh.md").read_text(encoding="utf-8")
+        with pytest.raises(ValueError, match="diverge structurally"):
+            resolve_conflicts(
+                str(repo.root), pairing_source(str(repo.root)), generated=(), public_blob_root=""
+            )
 
-    def test_clean_text_fallback_stays_unresolved_until_confirmed(
+    def test_clean_degraded_text_merge_stays_unresolved_until_confirmed(
         self, repo: Repo, tmp_path: Path
     ) -> None:
-        def commit_with_separator(source: str, zh: str, message: str) -> None:
-            repo.write(ANCHOR, source)
-            repo.write("docs/guide.zh.md", zh)
-            gate_write(repo)
-            meta = repo.root / META
-            meta.write_text(
-                meta.read_text(encoding="utf-8").replace(
-                    "\nguide.zh.md:",
-                    "\n# Stable separator for independent line merges.\nguide.zh.md:",
-                ),
-                encoding="utf-8",
-            )
-            repo.commit(message)
-
-        main_source = en_pair("guide.zh.md").replace("Body paragraph.", "Main rewrote it.")
-        side_zh = zh_pair("guide.md").replace("正文段落。", "主分支改写。")
         self._setup_attributes(repo)
-        commit_with_separator(en_pair("guide.zh.md"), zh_pair("guide.md"), "base")
-        git("branch", "side", cwd=repo.root)
-        commit_with_separator(main_source, zh_pair("guide.md"), "main changes the source")
-        git("checkout", "side", cwd=repo.root)
-        commit_with_separator(en_pair("guide.zh.md"), side_zh, "side changes the translation")
-        git("checkout", "main", cwd=repo.root)
-        env = _install_driver(repo, _fake_uv_bin(tmp_path, "#!/bin/sh\nexit 72\n"))
+        build_structurally_divergent_pair(repo, separator=True)
+        main_source = en_pair("guide.zh.md") + "\n## Main adds a section\n\nText.\n"
+        side_zh = zh_pair("guide.md") + "\n侧分支新增一段。\n"
+        env = _install_driver(repo, _runtime_uv_bin(tmp_path))
 
         merge = _git_merge(repo, "side", env)
 
@@ -1100,12 +1203,13 @@ class TestPairingMergeDriver:
             "\nguide.zh.md:", "\n# Stable separator for independent line merges.\nguide.zh.md:"
         )
         assert (repo.root / META).read_text(encoding="utf-8") == with_separator
-        assert resolve_conflicts(
-            str(repo.root), pairing_source(str(repo.root)), generated=(), public_blob_root=""
-        ) == [META]
+        with pytest.raises(ValueError, match="diverge structurally"):
+            resolve_conflicts(
+                str(repo.root), pairing_source(str(repo.root)), generated=(), public_blob_root=""
+            )
         assert (repo.root / ANCHOR).read_text(encoding="utf-8") == main_source
         assert (repo.root / "docs/guide.zh.md").read_text(encoding="utf-8") == side_zh
-        assert (repo.root / META).read_text(encoding="utf-8") == canonical
+        assert (repo.root / META).read_text(encoding="utf-8") == with_separator
 
     def test_pre_merge_commit_hook_rejection_leaves_a_staged_merge(
         self, repo: Repo, tmp_path: Path

@@ -36,7 +36,12 @@ _COMMAND_DOMAINS: tuple[tuple[str, str, tuple[Registrar, ...]], ...] = (
     (
         "pairing",
         "bilingual documentation pairing",
-        (pairing_verify.register, pairing_merge.register, pairing_brief.register),
+        (
+            pairing_verify.register,
+            pairing_merge.register,
+            pairing_merge.register_driver,
+            pairing_brief.register,
+        ),
     ),
     (
         "docs",

@@ -50,9 +50,9 @@ One name identifies one concept across the directory, the CLI domain, and the ho
 
 ### Git integrations
 
-The pairing merge driver derives a conflicted `.i18n.yaml` record from the confirmed ancestor, current, and other owner blobs when both language files use Git's default text strategy and merge cleanly. It fails closed on owner conflicts, non-text merge configuration, or invalid records; after an already-stopped merge, run `uv run hdsh pairing merge --resolve`, which stages every safe pairing record and exits unsuccessfully if other pairing conflicts still need manual work. See the [bilingual documentation contract](i18n/README.md#the-pairing-contract) for the exact files and states the driver accepts.
+The pairing merge driver derives a conflicted `.i18n.yaml` record from the confirmed ancestor, current, and other owner blobs when both language files use Git's default text strategy and merge cleanly. It is the `hdsh pairing merge-driver` CLI entry, registered worktree-locally by `uv run hdsh worktree install`; it fails closed on owner conflicts, non-text merge configuration, or invalid records, and after an already-stopped merge, `uv run hdsh pairing merge --resolve` stages every safe pairing record and exits unsuccessfully if other pairing conflicts still need manual work. See the [bilingual documentation contract](i18n/README.md#the-pairing-contract) for the exact files and states the driver accepts.
 
-When the driver's runtime is unavailable, the shell launcher degrades to a plain text merge with exit 1, so Git keeps the index stages unresolved; restore the environment and run `hdsh pairing merge --resolve`, or run `git merge --abort`.
+When composition fails, the entry writes an ordinary text conflict into the record, prints the recovery pointer, and exits non-zero so Git keeps the index stages unresolved. The driver's precondition is clean — hdsh installed and the project environment synced — and when it does not hold the driver command itself fails and Git stops the merge with a driver error; restore the environment with `uv sync`, then run `hdsh pairing merge --resolve`, or run `git merge --abort`.
 
 prek hooks are configured in [prek.toml](../prek.toml) as fast local checkpoints:
 
