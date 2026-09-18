@@ -47,7 +47,7 @@ runs:
         PROJECT_TOKEN: ${{ inputs.project-token }}
         APP_CLIENT_ID: ${{ inputs.app-client-id }}
         APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
-      run: ${{ github.action_path }}/scripts/flavor.sh "Issue policy"
+      run: python ${{ github.action_path }}/scripts/flavor.py "Issue policy"
     - name: Create Project read token
       id: app-token
       if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.account-type == 'organization' }}

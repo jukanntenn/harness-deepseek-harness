@@ -54,7 +54,7 @@ runs:
         PROJECT_TOKEN: ${{ inputs.project-token }}
         APP_CLIENT_ID: ${{ inputs.app-client-id }}
         APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
-      run: ${{ github.action_path }}/scripts/flavor.sh "Issue lifecycle"
+      run: python ${{ github.action_path }}/scripts/flavor.py "Issue lifecycle"
     - name: Create project token
       id: app-token
       if: ${{ (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.flavor.outputs.account-type == 'organization' }}

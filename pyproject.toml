@@ -77,6 +77,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+".github/actions/*/scripts/*.py" = [
+    "INP001",  # workflow scripts executed by runners, never an importable package
+]
 "tests/**" = [
     "S101",    # assertions are the test language
     "D",       # test names document behavior

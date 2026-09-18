@@ -131,21 +131,21 @@ jobs:
           printf '{"accountType": "user"}\n' > "$fixture/user.json"
           printf '{"accountType": "organization"}\n' > "$fixture/org.json"
           for action in issue-policy issue-lifecycle; do
-            script=".github/actions/$action/scripts/flavor.sh"
+            script=".github/actions/$action/scripts/flavor.py"
             grep -q "using: composite" ".github/actions/$action/action.yml"
             grep -q "hdsh-ref:" ".github/actions/$action/action.yml"
             CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN=token APP_CLIENT_ID= APP_PRIVATE_KEY= \
-              GITHUB_OUTPUT="$fixture/output" sh "$script" "$action"
+              GITHUB_OUTPUT="$fixture/output" python "$script" "$action"
             grep -q "account-type=user" "$fixture/output"
             rm -f "$fixture/output"
             if CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN= APP_CLIENT_ID= APP_PRIVATE_KEY= \
-              GITHUB_OUTPUT="$fixture/output" sh "$script" "$action" 2>"$fixture/err"; then
+              GITHUB_OUTPUT="$fixture/output" python "$script" "$action" 2>"$fixture/err"; then
               echo "::error::user flavor without project-token must fail loud"
               exit 1
             fi
             grep -q "requires the project-token input" "$fixture/err"
             if CONFIG_PATH="$fixture/org.json" PROJECT_TOKEN=token APP_CLIENT_ID= APP_PRIVATE_KEY= \
-              GITHUB_OUTPUT="$fixture/output" sh "$script" "$action" 2>"$fixture/err"; then
+              GITHUB_OUTPUT="$fixture/output" python "$script" "$action" 2>"$fixture/err"; then
               echo "::error::organization flavor without app credentials must fail loud"
               exit 1
             fi

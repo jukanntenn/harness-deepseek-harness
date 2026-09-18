@@ -12,7 +12,7 @@ Status: implemented
 
 ### 两个 composite action 持有全部胶水
 
-`issue-policy` 与 `issue-lifecycle` 是 `.github/actions/<name>/action.yml` 下的 composite action——GitHub 官方教程为仓库内 action 推荐的位置。每个 action 承载此前 workflow 文件承载的一切：从消费方仓库的策略配置解析 flavor、按 flavor 校验凭据、经钉住 SHA 的 `actions/create-github-app-token` 嵌套 `uses:` 铸造 GitHub App 令牌、受信 checkout、引擎供给、CLI 调用。GitHub 的事件触发器无法跨仓库订阅，消费方的 workflow 文件永远保留——但它缩减为触发器集合、最小 `permissions` 块、一行带凭据 inputs 的 `uses:`。这取代 [github-workflow RFC（决策记录）](../process/2026-09-07-github-workflow.zh.md)决定的胶水归属，后者已在同一变更中更新；其不变量存续——策略逻辑留在引擎，workflow 文件只订阅与调用。flavor 逻辑位于各 action 目录内的 `scripts/flavor.sh`，两个 action 逐字节相同，因此 CI 彩排可以直接执行它。
+`issue-policy` 与 `issue-lifecycle` 是 `.github/actions/<name>/action.yml` 下的 composite action——GitHub 官方教程为仓库内 action 推荐的位置。每个 action 承载此前 workflow 文件承载的一切：从消费方仓库的策略配置解析 flavor、按 flavor 校验凭据、经钉住 SHA 的 `actions/create-github-app-token` 嵌套 `uses:` 铸造 GitHub App 令牌、受信 checkout、引擎供给、CLI 调用。GitHub 的事件触发器无法跨仓库订阅，消费方的 workflow 文件永远保留——但它缩减为触发器集合、最小 `permissions` 块、一行带凭据 inputs 的 `uses:`。这取代 [github-workflow RFC（决策记录）](../process/2026-09-07-github-workflow.zh.md)决定的胶水归属，后者已在同一变更中更新；其不变量存续——策略逻辑留在引擎，workflow 文件只订阅与调用。flavor 逻辑位于各 action 目录内的 `scripts/flavor.py`，两个 action 逐字节相同，因此 CI 彩排可以直接执行它。
 
 ### 凭据经 inputs 进入；action 从不触碰 secrets
 
@@ -32,7 +32,7 @@ action 从 default branch checkout 消费方的配置，绝不用 PR head——�
 
 ## 验证
 
-`tests/policy/` 钉住每一种交叉验证错配：缺失 repository 上下文、缺失 owner 上下文、repository、owner、accountType 矛盾，以及 CLI 的诊断路径。CI 的 `action-rehearsal` job 对 user 与 organization 两类 fixture 执行两个 action 的 `flavor.sh`（快乐路径加两条显性失败路径），以引擎的准确 CLI 调用方式运行一份与事件载荷矛盾的配置；自 workflow 翻转变更起，它还断言两个自托管 workflow 引用均为全限定、任何地方都没有相对 `uses:`。在真实 API 流量下对真实消费方仓库的彩排留作未来工作，直到存在 release tag。
+`tests/policy/` 钉住每一种交叉验证错配：缺失 repository 上下文、缺失 owner 上下文、repository、owner、accountType 矛盾，以及 CLI 的诊断路径。CI 的 `action-rehearsal` job 对 user 与 organization 两类 fixture 执行两个 action 的 `flavor.py`（快乐路径加两条显性失败路径），以引擎的准确 CLI 调用方式运行一份与事件载荷矛盾的配置；自 workflow 翻转变更起，它还断言两个自托管 workflow 引用均为全限定、任何地方都没有相对 `uses:`。在真实 API 流量下对真实消费方仓库的彩排留作未来工作，直到存在 release tag。
 
 ## 备选方案
 
