@@ -16,9 +16,10 @@ from hdsh.policy.commands import (
     pr_main,
     read_event,
     run_command,
+    validate_context,
 )
 from tests.helpers import parse_command
-from tests.policy.support import config_with
+from tests.policy.support import CONFIG, USER_CONFIG, config_with, event_with
 
 
 class FakeClient:
@@ -109,7 +110,7 @@ class TestPolicyMain:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         event = tmp_path / "event.json"
-        event.write_text(json.dumps({"pull_request": {"number": 1}}), encoding="utf-8")
+        event.write_text(json.dumps(event_with(pull_request={"number": 1})), encoding="utf-8")
         monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
         monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
         monkeypatch.delenv("GH_TOKEN", raising=False)
@@ -131,7 +132,7 @@ class TestPolicyMainSuccess:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         event = tmp_path / "event.json"
-        event.write_text(json.dumps({"pull_request": {"number": 1}}), encoding="utf-8")
+        event.write_text(json.dumps(event_with(pull_request={"number": 1})), encoding="utf-8")
         config = tmp_path / "config.json"
         config.write_text(config_with(), encoding="utf-8")
         monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
@@ -147,13 +148,13 @@ class TestPolicyMainSuccess:
         monkeypatch.setattr(policy_module, "run_command", recording_command)
         parsed = parse_command(policy_module.register, ["pr", "--config", str(config)])
         assert pr_main(parsed) == 0
-        assert dispatched == [("pr", {"pull_request": {"number": 1}})]
+        assert dispatched == [("pr", event_with(pull_request={"number": 1}))]
 
     def test_lifecycle_main_returns_zero_on_success(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         event = tmp_path / "event.json"
-        event.write_text(json.dumps({"action": "opened"}), encoding="utf-8")
+        event.write_text(json.dumps(event_with(action="opened")), encoding="utf-8")
         config = tmp_path / "config.json"
         config.write_text(config_with(), encoding="utf-8")
         monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
@@ -166,3 +167,67 @@ class TestPolicyMainSuccess:
         monkeypatch.setattr(policy_module, "run_command", no_command)
         parsed = parse_command(policy_module.register, ["lifecycle", "--config", str(config)])
         assert lifecycle_main(parsed) == 0
+
+
+class TestValidateContext:
+    def test_matching_context_passes(self) -> None:
+        validate_context(CONFIG, event_with(pull_request={"number": 1}))
+
+    def test_user_account_type_matches_a_user_owner(self) -> None:
+        event = event_with(repository={"name": "hdsh", "owner": {"login": "hdsh", "type": "User"}})
+        validate_context(USER_CONFIG, event)
+
+    def test_missing_repository_context_raises(self) -> None:
+        with pytest.raises(ValueError, match="no repository context"):
+            validate_context(CONFIG, {"pull_request": {"number": 1}})
+
+    def test_repository_without_owner_context_raises(self) -> None:
+        with pytest.raises(ValueError, match="no repository owner context"):
+            validate_context(CONFIG, {"repository": {"name": "hdsh"}})
+
+    def test_repository_mismatch_raises(self) -> None:
+        event = event_with(
+            repository={"name": "elsewhere", "owner": {"login": "hdsh", "type": "Organization"}}
+        )
+        with pytest.raises(
+            ValueError,
+            match="config.repository 'hdsh' does not match the event repository 'elsewhere'",
+        ):
+            validate_context(CONFIG, event)
+
+    def test_owner_mismatch_raises(self) -> None:
+        event = event_with(
+            repository={"name": "hdsh", "owner": {"login": "someone", "type": "Organization"}}
+        )
+        with pytest.raises(
+            ValueError, match="config.owner 'hdsh' does not match the event owner 'someone'"
+        ):
+            validate_context(CONFIG, event)
+
+    def test_account_type_mismatch_raises(self) -> None:
+        event = event_with(repository={"name": "hdsh", "owner": {"login": "hdsh", "type": "User"}})
+        with pytest.raises(ValueError, match="config.accountType 'organization' does not match"):
+            validate_context(CONFIG, event)
+
+    def test_cli_reports_a_context_mismatch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        event = tmp_path / "event.json"
+        event.write_text(
+            json.dumps(
+                {
+                    "repository": {
+                        "name": "elsewhere",
+                        "owner": {"login": "hdsh", "type": "Organization"},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        config = tmp_path / "config.json"
+        config.write_text(config_with(), encoding="utf-8")
+        monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+        parsed = parse_command(policy_module.register, ["pr", "--config", str(config)])
+        assert pr_main(parsed) == 1
+        assert "does not match the event repository" in capsys.readouterr().err

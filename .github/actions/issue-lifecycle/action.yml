@@ -1,0 +1,77 @@
+# Composite action behind the consumer-facing Issue lifecycle gate: event-
+# directed Project-board transitions driven from the repository's checked-in
+# policy config. Consumers keep only the triggers, the minimal permissions
+# block (issues: write is required here), the per-issue concurrency group, and
+# the credential mapping; everything else upgrades by moving one `uses:` ref.
+name: hdsh issue lifecycle
+description: Apply event-directed Issue lifecycle transitions from the repository's checked-in policy config.
+inputs:
+  github-token:
+    description: Repository token for REST reads and issue mutations.
+    default: ${{ github.token }}
+  project-token:
+    description: Project (GraphQL) token; required when config accountType is user.
+    default: ""
+  app-client-id:
+    description: GitHub App client ID; required when config accountType is organization.
+    default: ""
+  app-private-key:
+    description: GitHub App private key; required when config accountType is organization.
+    default: ""
+  config-path:
+    description: Policy config path on the repository default branch.
+    default: .github/issue-management/config.json
+  hdsh-ref:
+    description: git ref (tag or full SHA) of harness-deepseek-harness that provides the engine.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check out trusted policy
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ github.event.repository.default_branch }}
+        persist-credentials: false
+    - name: Install uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      with:
+        python-version: "3.13"
+    - name: Resolve deployment flavor and credentials
+      # Runs on every event except benign reviews so the job reports success
+      # rather than a gray skipped segment; only a changes_requested review
+      # drives the Project board, and only then can a token be minted. The
+      # checked-out config decides which credential flavor must exist; the
+      # later `||` selections are proven by this step, not silent defaults.
+      # Organization deployments authenticate REST and GraphQL with one GitHub
+      # App token; user deployments cannot grant an App access to user-owned
+      # Projects, so REST runs on github-token and GraphQL on the PAT behind
+      # the project-token input.
+      id: flavor
+      if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+      shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config-path }}
+        PROJECT_TOKEN: ${{ inputs.project-token }}
+        APP_CLIENT_ID: ${{ inputs.app-client-id }}
+        APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
+      run: python ${{ github.action_path }}/scripts/flavor.py "Issue lifecycle"
+    - name: Create project token
+      id: app-token
+      if: ${{ (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.flavor.outputs.account-type == 'organization' }}
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
+      with:
+        client-id: ${{ inputs.app-client-id }}
+        private-key: ${{ inputs.app-private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+    - name: Handle repository event
+      if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}
+        PROJECT_TOKEN: ${{ steps.app-token.outputs.token || inputs.project-token }}
+        CONFIG_PATH: ${{ inputs.config-path }}
+        HDSH_REF: ${{ inputs.hdsh-ref }}
+        REPOSITORY_URL: ${{ github.event.repository.clone_url }}
+      run: |
+        uv tool run --from "harness-deepseek-harness @ git+${REPOSITORY_URL}@${HDSH_REF}" hdsh policy lifecycle --config "$CONFIG_PATH"

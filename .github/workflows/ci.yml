@@ -105,3 +105,81 @@ jobs:
         run: prek validate-config prek.toml
       - name: Validate the published hook manifest
         run: prek validate-manifest .pre-commit-hooks.yaml
+
+  action-rehearsal:
+    name: Consumer action rehearsal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Sync the locked environment
+        run: uv sync
+      - name: Rehearse the composite-action contracts
+        # The consumer rehearsal exercises the actions' flavor-resolution
+        # scripts and the engine's config cross-validation directly — the
+        # consumer-shaped failure modes — without minting tokens or touching
+        # a live repository.
+        run: |
+          set -eu
+          fixture=$(mktemp -d)
+          printf '{"accountType": "user"}\n' > "$fixture/user.json"
+          printf '{"accountType": "organization"}\n' > "$fixture/org.json"
+          for action in issue-policy issue-lifecycle; do
+            script=".github/actions/$action/scripts/flavor.py"
+            grep -q "using: composite" ".github/actions/$action/action.yml"
+            grep -q "hdsh-ref:" ".github/actions/$action/action.yml"
+            CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN=token APP_CLIENT_ID= APP_PRIVATE_KEY= \
+              GITHUB_OUTPUT="$fixture/output" python "$script" "$action"
+            grep -q "account-type=user" "$fixture/output"
+            rm -f "$fixture/output"
+            if CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN= APP_CLIENT_ID= APP_PRIVATE_KEY= \
+              GITHUB_OUTPUT="$fixture/output" python "$script" "$action" 2>"$fixture/err"; then
+              echo "::error::user flavor without project-token must fail loud"
+              exit 1
+            fi
+            grep -q "requires the project-token input" "$fixture/err"
+            if CONFIG_PATH="$fixture/org.json" PROJECT_TOKEN=token APP_CLIENT_ID= APP_PRIVATE_KEY= \
+              GITHUB_OUTPUT="$fixture/output" python "$script" "$action" 2>"$fixture/err"; then
+              echo "::error::organization flavor without app credentials must fail loud"
+              exit 1
+            fi
+            grep -q "requires the app-client-id and app-private-key inputs" "$fixture/err"
+          done
+      - name: Rehearse config cross-validation against a mismatched consumer event
+        run: |
+          set -eu
+          fixture=$(mktemp -d)
+          cat > "$fixture/config.json" <<'JSON'
+          {
+            "owner": "consumer-org",
+            "accountType": "user",
+            "repository": "consumer-repo",
+            "projectNumber": 1,
+            "projectTitle": "Consumer Issues",
+            "lifecycleActor": "consumer-actor",
+            "priorityField": "Priority",
+            "startDateField": "Start date",
+            "projectTimeZone": "Asia/Shanghai",
+            "statuses": ["Inbox", "Backlog", "Ready", "In progress", "In review", "Done", "No action"]
+          }
+          JSON
+          cat > "$fixture/event.json" <<'JSON'
+          {
+            "repository": {
+              "name": "renamed-repo",
+              "owner": {"login": "consumer-org", "type": "User"}
+            },
+            "pull_request": {"number": 1}
+          }
+          JSON
+          if uv run --no-sync hdsh policy pr --config "$fixture/config.json" --event "$fixture/event.json" 2>"$fixture/err"; then
+            echo "::error::a config contradicting the event repository must fail loud"
+            exit 1
+          fi
+          grep -q "does not match the event repository" "$fixture/err"
