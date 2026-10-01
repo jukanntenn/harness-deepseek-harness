@@ -56,6 +56,14 @@ done
 rm -f "$running"
 """
 
+FAKE_HDSH = """#!/bin/sh
+# The bare driver form must lose here by default so the fake uv stays the
+# resolution path under test; HDSH_TEST_HDSH_STATUS=0 lets it win.
+if [ "$1" = "pairing" ] && [ "$2" = "merge" ]; then
+  exit ${HDSH_TEST_HDSH_STATUS:-1}
+fi
+exit 64
+"""
 FAKE_UV = """#!/bin/sh
 if [ -n "${HDSH_TEST_UV_LOG:-}" ]; then
   printf '%s\\n' "$*" >> "$HDSH_TEST_UV_LOG"
@@ -108,6 +116,9 @@ def worktrees(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]
     fake_prek = bin_directory / "prek"
     fake_prek.write_text(FAKE_PREK, encoding="utf-8")
     fake_prek.chmod(0o755)
+    fake_hdsh = bin_directory / "hdsh"
+    fake_hdsh.write_text(FAKE_HDSH, encoding="utf-8")
+    fake_hdsh.chmod(0o755)
     fake_uv = bin_directory / "uv"
     fake_uv.write_text(FAKE_UV, encoding="utf-8")
     fake_uv.chmod(0o755)
@@ -560,11 +571,23 @@ class TestProbeAndPrekBoundary:
         main = worktrees["main"]
         monkeypatch.setenv("HDSH_TEST_UV_STATUS", "1")
 
-        with pytest.raises(WorktreeError, match="pairing merge --probe failed"):
+        with pytest.raises(WorktreeError, match="no runnable hdsh for the pairing merge driver"):
             install(str(main))
         assert git("config", "--worktree", "core.hooksPath", cwd=main, check=False).returncode == 1
         assert git("config", "merge.hdsh-pairing.driver", cwd=main, check=False).returncode == 1
         assert Path(hooks_path_of(main)).is_dir()
+
+    def test_registers_the_bare_form_when_hdsh_runs(
+        self, worktrees: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        main = worktrees["main"]
+        monkeypatch.setenv("HDSH_TEST_HDSH_STATUS", "0")
+        driver = install(str(main))
+        assert driver == "hdsh pairing merge-driver %O %A %B %P"
+        assert (
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=main).stdout.strip()
+            == driver
+        )
 
     def test_does_not_pass_command_git_config_to_prek(
         self, worktrees: dict[str, Any], monkeypatch: pytest.MonkeyPatch

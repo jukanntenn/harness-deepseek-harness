@@ -30,4 +30,4 @@ Pair the repository's own README (translate the counterpart, then `hdsh pairing 
 
 ## Phase 4 — the local workflow layer
 
-Add hdsh to the project (`uv add "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>"` until PyPI publishes), then run `uv run hdsh worktree install` in each worktree for the prek hooks and the pairing merge driver. Upgrades rerun `hdsh adopt apply` under the newer ref. Generated files are upstream-owned: redirect local changes upstream instead of forking them.
+Add hdsh to the project (`uv add "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>"` until PyPI publishes), then run `uv run hdsh worktree install` in each worktree for the prek hooks and the pairing merge driver. The managed hooks carry the `hdsh` group; a `--group`-filtered CI must include it or every gate silently drops out. Older actionlint misreports the `field_added`/`field_removed` triggers; bridge with `paths.ignore` until known. Upgrades rerun `hdsh adopt apply` under the newer ref. Generated files are upstream-owned: redirect local changes upstream instead of forking them.

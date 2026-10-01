@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/bug-fix/2026-10-01-first-adopter-defect-batch.md
+2026-10-01-first-adopter-defect-batch.md: 17fdf8ce875b8cfdd065acb71610c371cf280657
+2026-10-01-first-adopter-defect-batch.zh.md: 53ad0efe2e320bffcec682d8b3aa0811faf6ec6e

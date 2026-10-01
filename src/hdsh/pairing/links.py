@@ -27,7 +27,7 @@ from markdown_it.common.utils import isPunctChar, normalizeReference, unescapeAl
 SEMANTIC_TARGET_PREFIX = "hdsh-pairing-target:"
 
 _SWITCHER_LINE_PATTERN = re.compile(
-    r"^(?:English \| \[中文\]\([^\n]+\)|\[English\]\([^\n]+\) \| 中文)$"
+    r"^(?:English \| \[(?:中文|简体中文)\]\([^\n]+\)|\[English\]\([^\n]+\) \| (?:中文|简体中文))$"
 )
 _EXTERNAL_URL_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 #: CommonMark autolink scheme: a letter plus 1-31 scheme characters.
@@ -1056,7 +1056,8 @@ def language_switcher_line(
     The switcher is the first paragraph after the document's first H1 heading
     (setext included; earlier non-H1 headings do not end the search) whose
     authored text matches ``English | [中文](…)`` or ``[English](…) | 中文``
-    exactly and whose single inline link targets one of ``accepted_targets``.
+    with either label position reading `中文` or `简体中文`, and whose single
+    inline link targets one of ``accepted_targets``.
     The scan stops at the next heading of any depth.
 
     Args:

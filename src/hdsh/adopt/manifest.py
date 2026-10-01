@@ -31,6 +31,10 @@ class AdoptManifest:
     #: Consumer-completable destinations installed as placeholder templates;
     #: verify counts their ``TODO(adopt):`` markers instead of digests.
     editable: tuple[str, ...] = ()
+    #: Destinations skipped because a consumer file pre-existed; verify names
+    #: the harness anchors the installed corpus links into until the manual
+    #: merge lands.
+    pending_merges: tuple[str, ...] = ()
 
 
 class ManifestError(ValueError):
@@ -74,6 +78,7 @@ def load_manifest(root: str) -> AdoptManifest:
     hdsh_ref = value.get("hdshRef")
     files = value.get("files")
     editable = value.get("editable", [])
+    pending_merges = value.get("pendingMerges", [])
     if not isinstance(hdsh_version, str) or not isinstance(hdsh_ref, str):
         msg = f"{MANIFEST_PATH} requires string hdshVersion and hdshRef fields"
         raise ManifestError(msg)
@@ -85,11 +90,17 @@ def load_manifest(root: str) -> AdoptManifest:
     if not isinstance(editable, list) or not all(isinstance(path, str) for path in editable):
         msg = f"{MANIFEST_PATH} requires an editable list of paths"
         raise ManifestError(msg)
+    if not isinstance(pending_merges, list) or not all(
+        isinstance(path, str) for path in pending_merges
+    ):
+        msg = f"{MANIFEST_PATH} requires a pendingMerges list of paths"
+        raise ManifestError(msg)
     return AdoptManifest(
         hdsh_version=hdsh_version,
         hdsh_ref=hdsh_ref,
         files=dict(files),
         editable=tuple(editable),
+        pending_merges=tuple(pending_merges),
     )
 
 
@@ -105,6 +116,7 @@ def save_manifest(root: str, manifest: AdoptManifest) -> None:
         "hdshRef": manifest.hdsh_ref,
         "files": dict(sorted(manifest.files.items())),
         "editable": sorted(manifest.editable),
+        "pendingMerges": sorted(manifest.pending_merges),
     }
     path = Path(root, MANIFEST_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)

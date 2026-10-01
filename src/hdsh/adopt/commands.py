@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import posixpath
 import re
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from hdsh.adopt.manifest import (
     load_manifest,
     save_manifest,
 )
+from hdsh.docs.markdown import document_anchors
 from hdsh.pairing import verify as pairing_verify
 
 if TYPE_CHECKING:
@@ -42,6 +44,8 @@ TOOL = "hdsh adopt"
 ACCOUNT_TYPES = ("user", "organization")
 SHARED_DESTINATIONS = frozenset({".gitattributes", "prek.toml"})
 PLACEHOLDER_MARKER = "TODO(adopt):"
+_PENDING_LINK = re.compile(r"\]\(([^)\s]+)\)")
+_PENDING_FENCE = re.compile(r"^\s*(?:```|~~~)")
 
 _MIRRORS_ROOT = Path(__file__).parent / "templates" / "mirrors"
 _TEMPLATES_ROOT = Path(__file__).parent / "templates" / "templates"
@@ -97,6 +101,9 @@ class AdoptionPlan:
     records: tuple[str, ...]
     #: Destinations deliberately not installed, with the reason.
     skipped: tuple[str, ...]
+    #: Destinations skipped because a consumer file pre-existed; the manual
+    #: merge stays tracked in the manifest until the harness anchors resolve.
+    pending_merges: tuple[str, ...]
     #: Human-readable status lines for plan and apply output.
     notes: tuple[str, ...]
 
@@ -156,8 +163,13 @@ def _resolve_slug(root: str) -> tuple[str, str] | None:
 
 
 def _managed_prek_block(hdsh_ref: str) -> str:
-    """The adopt-managed prek block pinned at one hdsh ref."""
-    hooks = ",\n".join(f'  {{ id = "{hook}" }}' for hook in _PREK_HOOK_IDS)
+    """The adopt-managed prek block pinned at one hdsh ref.
+
+    Every managed hook carries the ``hdsh`` group: prek's ``--group``
+    filtering excludes ungrouped hooks, so an ungrouped managed block would
+    silently vanish from any filtered CI run.
+    """
+    hooks = ",\n".join(f'  {{ id = "{hook}", groups = ["hdsh"] }}' for hook in _PREK_HOOK_IDS)
     return (
         f"{corpus.MANAGED_PREK_BEGIN}\n"
         "[[repos]]\n"
@@ -303,6 +315,7 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
     writes: list[PlannedWrite] = []
     records: list[str] = []
     skipped: list[str] = []
+    pending_merges: list[str] = []
     notes: list[str] = []
 
     status = _run_git(root, "status", "--porcelain")
@@ -372,15 +385,22 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
         )
     )
 
-    writes, skipped = _plan_clobbers(root, writes, skipped, blockers)
+    writes, skipped, pending_merges = _plan_clobbers(
+        root, writes, skipped, blockers, pending_merges
+    )
     if blockers:
         raise _blockers_error(blockers)
+    notes.append(
+        "the managed prek hooks carry group 'hdsh'; a CI that filters prek with "
+        "--group must include it"
+    )
     return AdoptionPlan(
         parameters=parameters,
         date=today,
         writes=tuple(writes),
         records=tuple(records),
         skipped=tuple(skipped),
+        pending_merges=tuple(pending_merges),
         notes=tuple(notes),
     )
 
@@ -479,8 +499,12 @@ def _plan_gitattributes(
 
 
 def _plan_clobbers(
-    root: str, writes: list[PlannedWrite], skipped: list[str], blockers: list[Blocker]
-) -> tuple[list[PlannedWrite], list[str]]:
+    root: str,
+    writes: list[PlannedWrite],
+    skipped: list[str],
+    blockers: list[Blocker],
+    pending_merges: list[str],
+) -> tuple[list[PlannedWrite], list[str], list[str]]:
     """Refuse to overwrite consumer-owned files; skip an existing root AGENTS.md.
 
     Args:
@@ -488,9 +512,11 @@ def _plan_clobbers(
         writes: The planned writes, filtered in place by the return value.
         skipped: Skipped-destination notes, appended here.
         blockers: Collected blockers; clobbering files append here.
+        pending_merges: Destinations left untouched behind a consumer file,
+            appended here for manifest tracking.
 
     Returns:
-        The ``(kept writes, skipped notes)`` pair.
+        The ``(kept writes, skipped notes, pending merges)`` triple.
     """
     digests = _previous_digests(root, blockers)
     kept: list[PlannedWrite] = []
@@ -503,9 +529,11 @@ def _plan_clobbers(
             kept.append(write)
             continue
         if write.dest == "AGENTS.md":
+            pending_merges.append(write.dest)
             skipped.append(
                 "AGENTS.md: an existing root AGENTS.md was left untouched; merge the harness "
-                "pointers (skills paths, command inventory) into it manually"
+                "pointers (skills paths, command inventory) into it manually — adopt verify "
+                "names the required harness anchors until the merge lands"
             )
             continue
         if write.dest in corpus.EDITABLE_DESTINATIONS:
@@ -535,7 +563,7 @@ def _plan_clobbers(
                 suggestion,
             )
         )
-    return kept, skipped
+    return kept, skipped, pending_merges
 
 
 def _previous_digests(root: str, blockers: list[Blocker]) -> dict[str, str]:
@@ -696,6 +724,7 @@ def apply_main(args: argparse.Namespace) -> int:
                     if write.dest in corpus.EDITABLE_DESTINATIONS
                 )
             ),
+            pending_merges=plan.pending_merges,
         ),
     )
     for line in (*plan.skipped, *plan.notes):
@@ -703,6 +732,42 @@ def apply_main(args: argparse.Namespace) -> int:
     print(f"{TOOL}: installed {len(plan.writes)} file(s); recorded {len(plan.records)} pair(s)")
     print(f"{TOOL}: next: complete the TODO(adopt) placeholders, then run hdsh adopt verify")
     return 0
+
+
+def _required_anchors(root: str, destination: str, sources: tuple[str, ...]) -> tuple[str, ...]:
+    """Every fragment the installed corpus links into one pending destination.
+
+    Args:
+        root: Consumer repository root.
+        destination: Repository-relative path of the pending merge target.
+        sources: Installed corpus files whose links are scanned; fenced code
+            blocks are examples, not references, and are skipped.
+
+    Returns:
+        The sorted anchor names the manual merge must provide.
+    """
+    required: set[str] = set()
+    for source in sources:
+        path = Path(root, source)
+        if not path.exists():
+            continue
+        fenced = False
+        for line in path.read_text(encoding="utf-8").split("\n"):
+            if _PENDING_FENCE.match(line):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for target in _PENDING_LINK.findall(line):
+                if "://" in target or target.startswith(("#", "/", "mailto:")):
+                    continue
+                link_path, separator, fragment = target.partition("#")
+                if not separator or not link_path:
+                    continue
+                resolved = posixpath.normpath(posixpath.join(posixpath.dirname(source), link_path))
+                if resolved == destination and fragment:
+                    required.add(fragment)
+    return tuple(sorted(required))
 
 
 def verify_main(_args: argparse.Namespace) -> int:
@@ -719,6 +784,7 @@ def verify_main(_args: argparse.Namespace) -> int:
         return 1
     drift: list[str] = []
     placeholders: list[str] = []
+    pending: list[str] = []
     for dest, digest in sorted(manifest.files.items()):
         path = Path(root, dest)
         if not path.exists():
@@ -734,17 +800,35 @@ def verify_main(_args: argparse.Namespace) -> int:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if PLACEHOLDER_MARKER in line:
                 placeholders.append(f"{dest}:{number}: {line.strip()}")
+    sources = tuple(sorted(manifest.files.keys() | set(manifest.editable)))
+    for dest in manifest.pending_merges:
+        path = Path(root, dest)
+        if not path.exists():
+            drift.append(f"{dest}: missing")
+            continue
+        anchors = document_anchors(path.read_text(encoding="utf-8"))
+        missing = [
+            anchor for anchor in _required_anchors(root, dest, sources) if anchor not in anchors
+        ]
+        if missing:
+            pending.append(
+                f"{dest}: manual merge pending — missing harness anchors: "
+                + ", ".join(f"#{anchor}" for anchor in missing)
+            )
     for line in drift:
         print(f"{TOOL}: {line}", file=sys.stderr)
     for line in placeholders:
+        print(f"{TOOL}: {line}")
+    for line in pending:
         print(f"{TOOL}: {line}")
     summary = (
         f"{TOOL}: {len(manifest.files)} managed file(s) against hdsh {manifest.hdsh_version} "
         f"({manifest.hdsh_ref})"
     )
-    if drift or placeholders:
+    if drift or placeholders or pending:
         print(
-            f"{summary}: {len(drift)} drift item(s), {len(placeholders)} placeholder(s) remain",
+            f"{summary}: {len(drift)} drift item(s), {len(placeholders)} placeholder(s), "
+            f"{len(pending)} pending merge(s) remain",
             file=sys.stderr,
         )
         return 1

@@ -1,0 +1,8 @@
+# actionlint 1.7.12 does not know the `issues.field_added` and
+# `issues.field_removed` activity types GitHub accepts and the lifecycle
+# workflow registers. Remove this exclusion once a pinned actionlint release
+# knows both types; until then the rehearsal job and live workflow runs cover
+# the excluded file.
+paths:
+  ignore:
+    - .github/workflows/issue-lifecycle.yml

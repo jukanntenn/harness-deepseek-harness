@@ -564,6 +564,7 @@ def _check_pair(
             f"`{Path(paths.source).name}: <40-hex>` and "
             f"`{Path(paths.zh).name}: <40-hex>`)"
         )
+        state[source] = "out-of-sync"
         return
 
     consistent = True
@@ -640,12 +641,12 @@ def _check_pair(
         errors.append(
             f"{paths.zh}: missing language switcher — no link to {Path(paths.source).name}"
         )
+        state[source] = "out-of-sync"
     if pairing_links.requires_source_language_switcher(source, generated) and not (
         pairing_links.has_language_switcher(source_text, en_switcher_targets)
     ):
-        errors.append(
-            f"{source}: missing language switcher — no link back to {Path(paths.zh).name}"
-        )
+        errors.append(f"{source}: missing language switcher — no link to {Path(paths.zh).name}")
+        state[source] = "out-of-sync"
     source_tree = parse_markdown(source_text)
     zh_tree = parse_markdown(zh_text)
     source_signature = structure_signature(
@@ -658,10 +659,10 @@ def _check_pair(
         zh_switcher_targets,
         _context(paths.zh, zh_text, is_pair_source, repository),
     )
-    errors.extend(
-        f"{source} ↔ {paths.zh}: {divergence}"
-        for divergence in structure_diff(source_signature, zh_signature)
-    )
+    divergences = structure_diff(source_signature, zh_signature)
+    if divergences:
+        errors.extend(f"{source} ↔ {paths.zh}: {divergence}" for divergence in divergences)
+        state[source] = "out-of-sync"
     if source not in state:
         state[source] = "ok"
 

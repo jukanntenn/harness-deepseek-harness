@@ -30,4 +30,4 @@ apply 看不到 GitHub 上的仓库状态；消费方的 agent 执行以下各�
 
 ## 阶段 4 —— 本地工作流层
 
-把 hdsh 加入项目（PyPI 发布前用 `uv add "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>"`），再在每个 worktree 运行 `uv run hdsh worktree install` 安装 prek 钩子与配对合并驱动。升级以更新的 ref 重跑 `hdsh adopt apply`。生成文件归上游所有：本地改动请引回上游，不要分叉。
+把 hdsh 加入项目（PyPI 发布前用 `uv add "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>"`），再在每个 worktree 运行 `uv run hdsh worktree install` 安装 prek 钩子与配对合并驱动。托管钩子带有 `hdsh` 组；带过滤的 CI 必须包含它，否则所有门禁静默退出运行。较旧的 actionlint 会误报 `field_added`、`field_removed` 触发器；以其认识这些类型为移除条件，用 `paths.ignore` 过渡。升级以更新的 ref 重跑 `hdsh adopt apply`。生成文件归上游所有：本地改动请引回上游，不要分叉。

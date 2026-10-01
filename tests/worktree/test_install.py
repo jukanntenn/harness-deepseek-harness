@@ -11,6 +11,7 @@ import pytest
 
 from hdsh.worktree import install as worktree_install
 from hdsh.worktree.config import (
+    BARE_PAIRING_MERGE_DRIVER_COMMAND,
     LEGACY_PAIRING_MERGE_DRIVER_COMMAND,
     PAIRING_MERGE_DRIVER_COMMAND,
 )
@@ -26,8 +27,11 @@ def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     def skipped(root: str) -> None:
         return None
 
+    def resolved(root: str) -> str:
+        return PAIRING_MERGE_DRIVER_COMMAND
+
     monkeypatch.setattr(worktree_install, "run_prek", skipped)
-    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", skipped)
+    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", resolved)
 
 
 def hooks_path_of(repo: Repo) -> str:
@@ -62,6 +66,21 @@ class TestFreshInstall:
             "--worktree",
             "merge.hdsh-pairing.driver",
             LEGACY_PAIRING_MERGE_DRIVER_COMMAND,
+            cwd=repo.root,
+        )
+        install(str(repo.root))
+        assert (
+            git("config", "--worktree", "merge.hdsh-pairing.driver", cwd=repo.root).stdout.strip()
+            == PAIRING_MERGE_DRIVER_COMMAND
+        )
+
+    def test_migrates_the_other_known_driver_form(self, repo: Repo) -> None:
+        install(str(repo.root))
+        git(
+            "config",
+            "--worktree",
+            "merge.hdsh-pairing.driver",
+            BARE_PAIRING_MERGE_DRIVER_COMMAND,
             cwd=repo.root,
         )
         install(str(repo.root))

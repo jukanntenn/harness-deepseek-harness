@@ -112,6 +112,16 @@ class TestRewriteUpstreamLinks:
         assert "[example](gone.md)" in rewritten
         assert f"[real]({UPSTREAM_BLOB_ROOT}/v0.1.0/docs/gone-too.md)" in rewritten
 
+    def test_inline_code_spans_are_untouched(self) -> None:
+        markdown = (
+            "The zh file opens with `[English](foo.md) | 中文` and the en file with "
+            "`English | [中文](foo.zh.md)`; see also [the real guide](guide.md).\n"
+        )
+        rewritten = self.rewrites(markdown, dest="docs/i18n/README.md")
+        assert "`[English](foo.md) | 中文`" in rewritten
+        assert "`English | [中文](foo.zh.md)`" in rewritten
+        assert f"[the real guide]({UPSTREAM_BLOB_ROOT}/v0.1.0/docs/i18n/guide.md)" in rewritten
+
     def test_images_are_rewritten_like_links(self) -> None:
         rewritten = self.rewrites("![logo](assets/brand.png)\n")
         assert rewritten == f"![logo]({UPSTREAM_BLOB_ROOT}/v0.1.0/docs/assets/brand.png)\n"

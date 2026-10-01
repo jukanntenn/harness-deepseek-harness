@@ -67,6 +67,9 @@ runs:
         PROJECT_TOKEN: ${{ steps.app-token.outputs.token || inputs.project-token }}
         CONFIG_PATH: ${{ inputs.config-path }}
         HDSH_REF: ${{ inputs.hdsh-ref }}
-        REPOSITORY_URL: ${{ github.event.repository.clone_url }}
+        # The action's own repository, not the event repository: a
+        # consumer workflow's clone URL names the consumer, where the
+        # pinned ref cannot exist. Local uses carry no action repository.
+        REPOSITORY_URL: https://github.com/${{ github.action_repository || github.repository }}.git
       run: |
         uv tool run --from "harness-deepseek-harness @ git+${REPOSITORY_URL}@${HDSH_REF}" hdsh policy pr --config "$CONFIG_PATH"

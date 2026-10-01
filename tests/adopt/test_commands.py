@@ -15,6 +15,7 @@ from hdsh.adopt.commands import (
     _gitattributes_content,
     _gitattributes_driver,
     _managed_prek_block,
+    _required_anchors,
     apply_main,
     plan_main,
     verify_main,
@@ -194,6 +195,7 @@ class TestApplyRoundTrip:
             (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
         )
         assert "AGENTS.md" not in manifest["files"]
+        assert manifest["pendingMerges"] == ["AGENTS.md"]
 
 
 class TestBlockers:
@@ -375,11 +377,60 @@ class TestVerify:
         assert ".agents/skills/pushing/SKILL.md: missing" in error
         assert "docs/architecture.md: missing" in error
 
+    def test_pending_merge_names_the_missing_harness_anchors(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / "AGENTS.md").write_text("# ours\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "standing orders", cwd=consumer.root)
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        output = capsys.readouterr().out
+        assert "AGENTS.md: manual merge pending" in output
+        assert "#run-relevant-checks-locally" in output
+        assert "#conventions" in output
+
+    def test_pending_merge_clears_once_the_anchors_resolve(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / "AGENTS.md").write_text("# ours\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "standing orders", cwd=consumer.root)
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        for path in consumer.root.rglob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            if "TODO(adopt):" in text and path.name != "AGENTS.md":
+                path.write_text(text.replace("TODO(adopt): ", ""), encoding="utf-8")
+        (consumer.root / "AGENTS.md").write_text(
+            "# ours\n\n## Conventions\n\nOurs.\n\n## Run relevant checks locally\n\nOurs.\n",
+            encoding="utf-8",
+        )
+        capsys.readouterr()
+        assert verify_cli() == 0, capsys.readouterr().out
+        assert "manual merge pending" not in capsys.readouterr().out
+
+    def test_pending_merge_file_deleted_becomes_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / "AGENTS.md").write_text("# ours\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "standing orders", cwd=consumer.root)
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        (consumer.root / "AGENTS.md").unlink()
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert "AGENTS.md: missing" in capsys.readouterr().err
+
 
 class TestPrekBlockUnits:
     def test_managed_block_pins_the_ref_and_every_hook(self) -> None:
         block = _managed_prek_block("v9.9.9")
         assert 'rev = "v9.9.9"' in block
+        assert 'groups = ["hdsh"]' in block
         for hook in (
             "hdsh-pairing-verify",
             "hdsh-rfc-verify",
@@ -388,7 +439,7 @@ class TestPrekBlockUnits:
             "hdsh-docs-links",
             "hdsh-docs-budgets",
         ):
-            assert hook in block
+            assert f'{{ id = "{hook}", groups = ["hdsh"] }}' in block
 
     def test_block_is_appended_to_consumer_configuration(self) -> None:
         existing = 'default_install_hook_types = ["pre-commit"]\n'
@@ -407,6 +458,38 @@ class TestPrekBlockUnits:
     def test_append_to_content_without_a_trailing_newline(self) -> None:
         updated = _apply_prek_block("x = 1", _managed_prek_block("v1"))
         assert updated.startswith("x = 1\n")
+
+
+class TestRequiredAnchorsUnits:
+    def test_collects_fragments_targeting_the_destination(self, tmp_path: Path) -> None:
+        (tmp_path / ".agents" / "skills" / "reviewing").mkdir(parents=True)
+        (tmp_path / ".agents" / "skills" / "reviewing" / "SKILL.md").write_text(
+            "See [checks](../../../AGENTS.md#run-relevant-checks-locally) and "
+            "[rules](../../../AGENTS.md#conventions); also [bare](../../../AGENTS.md).\n",
+            encoding="utf-8",
+        )
+        anchors = _required_anchors(
+            str(tmp_path), "AGENTS.md", (".agents/skills/reviewing/SKILL.md",)
+        )
+        assert anchors == ("conventions", "run-relevant-checks-locally")
+
+    def test_skips_fenced_examples_absolute_and_foreign_targets(self, tmp_path: Path) -> None:
+        (tmp_path / ".agents" / "skills" / "reviewing").mkdir(parents=True)
+        (tmp_path / ".agents" / "skills" / "reviewing" / "SKILL.md").write_text(
+            "```markdown\n[example](../../../AGENTS.md#fenced)\n```\n"
+            "[web](https://example.com/AGENTS.md#web) "
+            "[root](/AGENTS.md#root) "
+            "[here](#here) "
+            "[else](../../../docs/other.md#else)\n",
+            encoding="utf-8",
+        )
+        assert (
+            _required_anchors(str(tmp_path), "AGENTS.md", (".agents/skills/reviewing/SKILL.md",))
+            == ()
+        )
+
+    def test_missing_sources_contribute_nothing(self, tmp_path: Path) -> None:
+        assert _required_anchors(str(tmp_path), "AGENTS.md", (".agents/skills/gone.md",)) == ()
 
 
 class TestGitattributesUnits:

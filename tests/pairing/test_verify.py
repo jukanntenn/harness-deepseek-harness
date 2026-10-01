@@ -280,6 +280,38 @@ class TestListMode:
         assert f"{'out-of-sync':<11} docs/edited.md" in text
         assert "1 ok, 1 out-of-sync, 1 missing" in text
 
+    def test_list_agrees_with_verify_on_structural_divergence(self, repo: Repo) -> None:
+        write_pair(repo, "docs/guide.md", zh=lambda target: zh_pair(target) + "\n- extra\n")
+        record(repo, "docs/guide.md")
+        code, _, err = run(repo, "verify")
+        assert code == 1
+        assert any("diverges" in line for line in err)
+        _, out, _ = run(repo, "list")
+        assert f"{'out-of-sync':<11} docs/guide.md" in "\n".join(out)
+
+    def test_list_agrees_with_verify_on_a_missing_switcher(self, repo: Repo) -> None:
+        write_pair(
+            repo,
+            "docs/guide.md",
+            zh=lambda target: zh_pair(target).replace(f"[English]({target}) | 中文", "no switcher"),
+        )
+        record(repo, "docs/guide.md")
+        code, _, err = run(repo, "verify")
+        assert code == 1
+        assert any("missing language switcher" in line for line in err)
+        _, out, _ = run(repo, "list")
+        assert f"{'out-of-sync':<11} docs/guide.md" in "\n".join(out)
+
+    def test_list_agrees_with_verify_on_a_malformed_record(self, repo: Repo) -> None:
+        write_pair(repo, "docs/guide.md")
+        record(repo, "docs/guide.md")
+        (repo.root / "docs/guide.i18n.yaml").write_text("garbage\n", encoding="utf-8")
+        code, _, err = run(repo, "verify")
+        assert code == 1
+        assert any("malformed consistency record" in line for line in err)
+        _, out, _ = run(repo, "list")
+        assert f"{'out-of-sync':<11} docs/guide.md" in "\n".join(out)
+
 
 class TestPairsScope:
     def test_named_pair_check_only(self, repo: Repo) -> None:
