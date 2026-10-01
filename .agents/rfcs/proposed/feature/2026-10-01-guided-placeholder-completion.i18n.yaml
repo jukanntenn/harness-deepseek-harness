@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/proposed/feature/2026-10-01-guided-placeholder-completion.md
+2026-10-01-guided-placeholder-completion.md: a3920591160ff37f808f70927566daeffc5aa927
+2026-10-01-guided-placeholder-completion.zh.md: d0d530cc4fdff43c8c76b4ebb28708bc73c4479c
