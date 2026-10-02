@@ -110,7 +110,11 @@ class TestRealTransport:
         completed = subprocess.run(
             ["git", "--version"], capture_output=True, text=True, check=False
         )
-        monkeypatch.setattr(wizard.subprocess, "run", lambda *a, **k: completed)
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return completed
+
+        monkeypatch.setattr(wizard.subprocess, "run", fake_run)
         assert wizard._run(["git", "--version"], None) is completed
 
     def test_the_local_timezone_oserror_path_fails_loud(
@@ -128,9 +132,10 @@ class TestPreflightMain:
     def test_main_prints_one_line_per_failure_and_exits_one(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        monkeypatch.setattr(
-            wizard, "preflight", lambda transport: ["gh is not authenticated; run gh auth login"]
-        )
+        def one_failure(transport: wizard.Transport | None) -> list[str]:
+            return ["gh is not authenticated; run gh auth login"]
+
+        monkeypatch.setattr(wizard, "preflight", one_failure)
         from tests.helpers import parse_command
 
         request = parse_command(wizard.register, ["preflight"])
@@ -144,7 +149,10 @@ class TestPreflightMain:
     def test_main_reports_a_ready_toolchain(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        monkeypatch.setattr(wizard, "preflight", lambda transport: [])
+        def no_failures(transport: wizard.Transport | None) -> list[str]:
+            return []
+
+        monkeypatch.setattr(wizard, "preflight", no_failures)
         from tests.helpers import parse_command
 
         request = parse_command(wizard.register, ["preflight"])
