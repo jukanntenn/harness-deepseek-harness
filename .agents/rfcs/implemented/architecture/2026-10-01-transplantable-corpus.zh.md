@@ -16,7 +16,7 @@ Status: implemented
 
 | 事实的性质 | 机制 |
 |---|---|
-| 每个仓库各有一个值 | 模板 + 引导占位符，门禁强制直到填完（[占位符完成 RFC](../../proposed/feature/2026-10-01-guided-placeholder-completion.zh.md)） |
+| 每个仓库各有一个值 | 模板 + 引导占位符，门禁强制直到填完（[占位符完成 RFC](../feature/2026-10-01-guided-placeholder-completion.zh.md)） |
 | 存在两个仓库都活的载体 | 把事实单源化到该载体 |
 | 事实随部署机械变化 | 移植时机械映射 |
 | 消费方不需要该事实 | 从消费方形态中移除 |

@@ -29,7 +29,11 @@ description: Use when reviewing a pull request in the harness-deepseek-harness r
 - **Configuration and public choices:** ask what current-consumer evidence or prior art supports each default, public operation set, format, or imported external concept. Require an explicit choice or deferral when that evidence is absent.
 - **Enforcement:** follow every denial path to the operation that executes it; exercise direct and alternate callers that can bypass argument parsing, validation, wrappers, or configuration.
 - **Borrowed and derived state:** determine whether each retained value is borrowed or owned, then trace every cache or derived view to its authoritative source and documented refresh point.
-- **Real entry path:** tests exercise the shipped console entry points (`hdsh-scope`, the gates) through their `main()` or a real subprocess where relevant. A hand-imported helper does not catch argument-parsing or exit-code regressions.
+- **Real entry path:** tests reach the real public surface rather than hand-imported helpers, so argument-parsing and exit-code regressions cannot hide.
+
+<!-- hdsh:slot entry-path -->
+TODO(adopt): State what the real entry path is in this repository (hdsh's own: tests exercise the shipped console entry points (`hdsh-scope`, the gates) through their `main()` or a real subprocess where relevant).
+<!-- /hdsh:slot -->
 - **Test strength:** assertions fail on the intended regression and verify external state, logs, events, or disposal rather than restating the implementation or trusting an agent's report. Coverage is necessary but not evidence that the scenario is correct.
 - **Negative controls:** verify that a deliberately invalid case fails through the real gate or runner for the intended rule.
 - **Implemented RFCs match shipped reality:** when a PR implements a proposed RFC, move it to `implemented/` and rewrite it as present-tense shipped state in the same diff, then verify paths, names, and mechanisms against the implementation.

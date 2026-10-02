@@ -49,6 +49,10 @@ After the triplet is sealed, never edit, move, translate, reformat, or delete it
 
 ## Validate and report
 
-Run `uv run hdsh rfc archive` and the focused archive tests (`uv run pytest tests/rfc/test_archive.py`); select any additional evidence through [pushing](../pushing/SKILL.md).
+Run `hdsh rfc archive` and the focused archive tests; select any additional evidence through [pushing](../pushing/SKILL.md).
+
+<!-- hdsh:slot archive-tests -->
+TODO(adopt): Name this repository's focused tests for the archive path (hdsh's own: `uv run pytest tests/rfc/test_archive.py`).
+<!-- /hdsh:slot -->
 
 Report active implemented RFCs kept, implemented RFCs archived, rejected RFCs kept and deleted, proposed RFCs rejected if any, and every genuinely borderline case with its rationale and chosen outcome. Do not claim archived outbound links are valid: the archive gate intentionally never checks them.

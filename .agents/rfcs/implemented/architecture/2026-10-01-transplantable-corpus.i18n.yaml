@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/architecture/2026-10-01-transplantable-corpus.md
-2026-10-01-transplantable-corpus.md: 9225834bcc6f55d28c5d1b6bb2f1dcd4537dbbcf
-2026-10-01-transplantable-corpus.zh.md: 8f7fed0e96af5714cf81091c318fe19f8d81b789
+2026-10-01-transplantable-corpus.md: 21f629bfb0ca489605b74e683a4e47c9bb8f4848
+2026-10-01-transplantable-corpus.zh.md: b22596515fa863c686d709136e147cde4edaddae

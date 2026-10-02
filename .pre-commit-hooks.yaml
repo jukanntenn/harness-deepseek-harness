@@ -68,3 +68,12 @@
   language: python
   files: '\.md$|\.hdsh/docs\.manifest\.json$'
   pass_filenames: false
+
+- id: hdsh-adopt-verify
+  name: adoption completion gate
+  description: Enforce completed adoption placeholders and pending merges from .hdsh/adopt.manifest.json; a repository without an adoption manifest is a no-op.
+  entry: hdsh adopt verify --hook
+  language: python
+  files: ''
+  pass_filenames: false
+  always_run: true

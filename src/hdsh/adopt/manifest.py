@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MANIFEST_PATH = ".hdsh/adopt.manifest.json"
@@ -38,6 +38,13 @@ class AdoptManifest:
     #: Consumer-owned configuration destinations; verify validates their
     #: structure at load instead of pinning their bytes.
     consumer_config: tuple[str, ...] = ()
+    #: Slot-template destinations; verify counts their unfilled ``TODO(adopt):``
+    #: slots while apply re-renders the prose around consumer-owned values.
+    slot_templates: tuple[str, ...] = ()
+    #: Per destination and slot, the digest of the guidance installed at the
+    #: last apply — the baseline apply compares against to reset a slot whose
+    #: upstream guidance changed.
+    slot_guidance: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 class ManifestError(ValueError):
@@ -83,6 +90,8 @@ def load_manifest(root: str) -> AdoptManifest:
     editable = value.get("editable", [])
     pending_merges = value.get("pendingMerges", [])
     consumer_config = value.get("consumerConfig", [])
+    slot_templates = value.get("slotTemplates", [])
+    slot_guidance = value.get("slotGuidance", {})
     if not isinstance(hdsh_version, str) or not isinstance(hdsh_ref, str):
         msg = f"{MANIFEST_PATH} requires string hdshVersion and hdshRef fields"
         raise ManifestError(msg)
@@ -104,6 +113,19 @@ def load_manifest(root: str) -> AdoptManifest:
     ):
         msg = f"{MANIFEST_PATH} requires a consumerConfig list of paths"
         raise ManifestError(msg)
+    if not isinstance(slot_templates, list) or not all(
+        isinstance(path, str) for path in slot_templates
+    ):
+        msg = f"{MANIFEST_PATH} requires a slotTemplates list of paths"
+        raise ManifestError(msg)
+    if not isinstance(slot_guidance, dict) or not all(
+        isinstance(dest, str)
+        and isinstance(slots, dict)
+        and all(isinstance(slot, str) and isinstance(digest, str) for slot, digest in slots.items())
+        for dest, slots in slot_guidance.items()
+    ):
+        msg = f"{MANIFEST_PATH} requires a slotGuidance object of path to slot digests"
+        raise ManifestError(msg)
     return AdoptManifest(
         hdsh_version=hdsh_version,
         hdsh_ref=hdsh_ref,
@@ -111,6 +133,8 @@ def load_manifest(root: str) -> AdoptManifest:
         editable=tuple(editable),
         pending_merges=tuple(pending_merges),
         consumer_config=tuple(consumer_config),
+        slot_templates=tuple(slot_templates),
+        slot_guidance={dest: dict(slots) for dest, slots in slot_guidance.items()},
     )
 
 
@@ -128,6 +152,11 @@ def save_manifest(root: str, manifest: AdoptManifest) -> None:
         "editable": sorted(manifest.editable),
         "pendingMerges": sorted(manifest.pending_merges),
         "consumerConfig": sorted(manifest.consumer_config),
+        "slotTemplates": sorted(manifest.slot_templates),
+        "slotGuidance": {
+            dest: dict(sorted(slots.items()))
+            for dest, slots in sorted(manifest.slot_guidance.items())
+        },
     }
     path = Path(root, MANIFEST_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)

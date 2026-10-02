@@ -16,7 +16,7 @@ Content specialization in the transplanted corpus follows one four-way model, an
 
 | Nature of the fact | Mechanism |
 |---|---|
-| Every repository needs its own value | Template with guided placeholders, gated until filled (the [placeholder-completion RFC](../../proposed/feature/2026-10-01-guided-placeholder-completion.md)) |
+| Every repository needs its own value | Template with guided placeholders, gated until filled (the [placeholder-completion RFC](../feature/2026-10-01-guided-placeholder-completion.md)) |
 | A carrier alive in both repositories exists | Single-source the fact to that carrier |
 | The fact varies mechanically by deployment | Mechanical mapping at transplant time |
 | The consumer does not need the fact | Removed from the consumer form |

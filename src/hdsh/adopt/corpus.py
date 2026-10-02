@@ -44,7 +44,6 @@ MIRRORED_FILES: tuple[tuple[str, str], ...] = (
     (".agents/rfcs/implemented/AGENTS.md", ".agents/rfcs/implemented/AGENTS.md"),
     (".agents/rfcs/archived/AGENTS.md", ".agents/rfcs/archived/AGENTS.md"),
     (".agents/rfcs/archived/manifest.json", ".agents/rfcs/archived/manifest.json"),
-    (".agents/skills/archiving-rfcs/SKILL.md", ".agents/skills/archiving-rfcs/SKILL.md"),
     (".agents/skills/documenting/SKILL.md", ".agents/skills/documenting/SKILL.md"),
     (".agents/skills/editing-prose/SKILL.md", ".agents/skills/editing-prose/SKILL.md"),
     (
@@ -56,8 +55,6 @@ MIRRORED_FILES: tuple[tuple[str, str], ...] = (
         ".agents/skills/finding-simplifications/SKILL.md",
     ),
     (".agents/skills/merging-stacked-prs/SKILL.md", ".agents/skills/merging-stacked-prs/SKILL.md"),
-    (".agents/skills/pushing/SKILL.md", ".agents/skills/pushing/SKILL.md"),
-    (".agents/skills/reviewing/SKILL.md", ".agents/skills/reviewing/SKILL.md"),
     (".agents/skills/translating-docs/SKILL.md", ".agents/skills/translating-docs/SKILL.md"),
     (
         ".agents/skills/trimming-cot-leakage/SKILL.md",
@@ -162,6 +159,110 @@ CONSUMER_CONFIG_DESTINATIONS: frozenset[str] = frozenset(
     }
 )
 
+#: Slot templates: skills whose per-repository command facts are guided
+#: placeholders. The prose around the slots is upstream-owned and re-rendered
+#: on every apply; each slot's value is consumer-owned and survives re-apply
+#: unless the upstream guidance itself changed, in which case apply resets
+#: the slot and the placeholder gate asks for a re-fill.
+SLOT_TEMPLATE_FILES: tuple[tuple[str, str], ...] = (
+    ("agents/skills/pushing/SKILL.md", ".agents/skills/pushing/SKILL.md"),
+    ("agents/skills/archiving-rfcs/SKILL.md", ".agents/skills/archiving-rfcs/SKILL.md"),
+    ("agents/skills/reviewing/SKILL.md", ".agents/skills/reviewing/SKILL.md"),
+)
+
+#: The destinations of the slot templates, for ownership checks.
+SLOT_TEMPLATE_DESTINATIONS: frozenset[str] = frozenset(dest for _, dest in SLOT_TEMPLATE_FILES)
+
+_SLOT_BEGIN = re.compile(r"^<!-- hdsh:slot ([a-z][a-z0-9-]*) -->$")
+_SLOT_END = "<!-- /hdsh:slot -->"
+
+
+def parse_slots(text: str) -> dict[str, str]:
+    """Parse one slot template into its named slot guidance contents.
+
+    Args:
+        text: Slot-template text whose slots are delimited by
+            ``<!-- hdsh:slot <name> -->`` and ``<!-- /hdsh:slot -->`` marker
+            lines.
+
+    Returns:
+        The slot name to the exact lines between the markers.
+
+    Raises:
+        ValueError: On an unmatched or nested marker, an empty slot body, or
+            a duplicate slot name.
+    """
+    slots: dict[str, str] = {}
+    name: str | None = None
+    body: list[str] = []
+    for line in text.split("\n"):
+        begin = _SLOT_BEGIN.match(line)
+        if begin is not None:
+            if name is not None:
+                msg = f"slot {name!r} begins again before it ends"
+                raise ValueError(msg)
+            if begin.group(1) in slots:
+                msg = f"slot {begin.group(1)!r} is defined twice"
+                raise ValueError(msg)
+            name = begin.group(1)
+            body = []
+            continue
+        if line == _SLOT_END:
+            if name is None:
+                msg = "a slot ends without a begin marker"
+                raise ValueError(msg)
+            content = "\n".join(body)
+            if not content.strip():
+                msg = f"slot {name!r} has an empty body"
+                raise ValueError(msg)
+            slots[name] = content
+            name = None
+            continue
+        if name is not None:
+            body.append(line)
+    if name is not None:
+        msg = f"slot {name!r} never ends"
+        raise ValueError(msg)
+    return slots
+
+
+def splice_slots(text: str, values: dict[str, str]) -> str:
+    """Rebuild one slot template with chosen values in place of guidance.
+
+    Args:
+        text: Slot-template text carrying the marker lines.
+        values: Slot name to the content to install; every slot must appear.
+
+    Returns:
+        The rebuilt text.
+
+    Raises:
+        ValueError: When a slot of ``text`` has no value.
+    """
+    slots = parse_slots(text)
+    missing = sorted(set(slots) - set(values))
+    if missing:
+        msg = f"slots without values: {', '.join(missing)}"
+        raise ValueError(msg)
+    lines: list[str] = []
+    name: str | None = None
+    for line in text.split("\n"):
+        begin = _SLOT_BEGIN.match(line)
+        if begin is not None:
+            slot_name = begin.group(1)
+            name = slot_name
+            lines.append(line)
+            lines.append(values[slot_name])
+            continue
+        if line == _SLOT_END:
+            name = None
+            lines.append(line)
+            continue
+        if name is None:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 _USER_CREDENTIAL_INPUTS = "          project-token: ${{ secrets.HDSH_ISSUE_PROJECT_TOKEN }}"
 _ORGANIZATION_CREDENTIAL_INPUTS = (
     "          app-client-id: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}\n"
@@ -222,6 +323,7 @@ def installed_destinations(date: str) -> frozenset[str]:
     """
     destinations = {dest for _, dest in MIRRORED_FILES}
     destinations.update(TEMPLATE_FILES[index][1] for index in range(len(TEMPLATE_FILES)))
+    destinations.update(dest for _, dest in SLOT_TEMPLATE_FILES)
     for anchor in MIRRORED_PAIRS:
         destinations.add(anchor)
         destinations.add(f"{anchor[: -len('.md')]}.zh.md")

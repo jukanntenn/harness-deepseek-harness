@@ -62,6 +62,7 @@ _PREK_HOOK_IDS = (
     "hdsh-docs-wrap",
     "hdsh-docs-links",
     "hdsh-docs-budgets",
+    "hdsh-adopt-verify",
 )
 
 
@@ -108,6 +109,9 @@ class AdoptionPlan:
     #: Destinations skipped because a consumer file pre-existed; the manual
     #: merge stays tracked in the manifest until the harness anchors resolve.
     pending_merges: tuple[str, ...]
+    #: Per destination and slot, the digest of the guidance this plan
+    #: installs — the reset baseline for the next apply.
+    slot_guidance: dict[str, dict[str, str]]
     #: Human-readable status lines for plan and apply output.
     notes: tuple[str, ...]
 
@@ -453,6 +457,9 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
         if dest in corpus.TEMPLATE_PAIRS:
             records.append(dest)
 
+    previous = _load_previous_manifest(root, blockers)
+    slot_guidance = _plan_slot_templates(root, writes, notes, blockers, previous)
+
     adopt_anchor = corpus.ADOPT_RFC_ANCHOR.format(date=today)
     for template, dest in (
         ("agents/adopt-rfc.md", adopt_anchor),
@@ -500,6 +507,7 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
         records=tuple(records),
         skipped=tuple(skipped),
         pending_merges=tuple(pending_merges),
+        slot_guidance=slot_guidance,
         notes=tuple(notes),
     )
 
@@ -597,6 +605,99 @@ def _plan_gitattributes(
     )
 
 
+def _load_previous_manifest(root: str, blockers: list[Blocker]) -> AdoptManifest | None:
+    """Load a previous adoption's manifest, if any, for slot baselines.
+
+    Args:
+        root: Consumer repository root.
+        blockers: Collected blockers; a malformed manifest appends here.
+
+    Returns:
+        The previous manifest, or ``None`` when absent or malformed.
+    """
+    if not Path(root, MANIFEST_PATH).exists():
+        return None
+    try:
+        return load_manifest(root)
+    except ManifestError as error:
+        blockers.append(
+            Blocker(
+                MANIFEST_PATH,
+                f"the previous adopt manifest is malformed ({error}).",
+                "Repair or remove it, then rerun.",
+            )
+        )
+        return None
+
+
+def _plan_slot_templates(
+    root: str,
+    writes: list[PlannedWrite],
+    notes: list[str],
+    blockers: list[Blocker],
+    previous: AdoptManifest | None,
+) -> dict[str, dict[str, str]]:
+    """Plan every slot-template write, preserving or resetting slot values.
+
+    Args:
+        root: Consumer repository root.
+        writes: Planned writes, appended here.
+        notes: Status lines, appended here for preserved and reset slots.
+        blockers: Collected blockers; malformed slot text appends here.
+        previous: The previous adoption's manifest, or ``None`` fresh.
+
+    Returns:
+        The guidance digests this plan installs, per destination and slot.
+    """
+    recorded = previous.slot_guidance if previous is not None else {}
+    guidance_out: dict[str, dict[str, str]] = {}
+    for template, dest in corpus.SLOT_TEMPLATE_FILES:
+        rendered = (_TEMPLATES_ROOT / template).read_text(encoding="utf-8")
+        target = Path(root, dest)
+        try:
+            fresh = corpus.parse_slots(rendered)
+            existing = (
+                corpus.parse_slots(target.read_text(encoding="utf-8")) if target.exists() else {}
+            )
+        except ValueError as error:
+            blockers.append(
+                Blocker(
+                    dest,
+                    f"slot text is malformed ({error}).",
+                    "Repair the installed slot markers, then rerun.",
+                )
+            )
+            continue
+        values: dict[str, str] = {}
+        resets: list[str] = []
+        preserved = 0
+        for name, guidance in fresh.items():
+            digest = file_digest(guidance.encode("utf-8"))
+            guidance_out.setdefault(dest, {})[name] = digest
+            value = existing.get(name)
+            if value is not None and value != guidance:
+                if recorded.get(dest, {}).get(name) == digest:
+                    values[name] = value
+                    preserved += 1
+                else:
+                    resets.append(name)
+                    values[name] = guidance
+            else:
+                values[name] = guidance
+        writes.append(
+            PlannedWrite(dest=dest, content=corpus.splice_slots(rendered, values).encode("utf-8"))
+        )
+        if target.exists():
+            if preserved:
+                notes.append(f"{dest}: {preserved} consumer slot value(s) preserved")
+            if resets:
+                notes.append(
+                    f"{dest}: upstream changed the {', '.join(sorted(resets))} slot "
+                    "guidance; the slot resets — re-fill it"
+                )
+    return guidance_out
+
+
 def _plan_clobbers(
     root: str,
     writes: list[PlannedWrite],
@@ -625,6 +726,9 @@ def _plan_clobbers(
             continue
         path = Path(root, write.dest)
         if not path.exists():
+            kept.append(write)
+            continue
+        if write.dest in corpus.SLOT_TEMPLATE_DESTINATIONS:
             kept.append(write)
             continue
         if write.dest in corpus.CONSUMER_CONFIG_DESTINATIONS:
@@ -673,19 +777,8 @@ def _plan_clobbers(
 
 def _previous_digests(root: str, blockers: list[Blocker]) -> dict[str, str]:
     """Read the installed digests of a previous adoption, if any."""
-    if not Path(root, MANIFEST_PATH).exists():
-        return {}
-    try:
-        return load_manifest(root).files
-    except ManifestError as error:
-        blockers.append(
-            Blocker(
-                MANIFEST_PATH,
-                f"the previous adopt manifest is malformed ({error}).",
-                "Repair or remove it, then rerun.",
-            )
-        )
-        return {}
+    previous = _load_previous_manifest(root, blockers)
+    return previous.files if previous is not None else {}
 
 
 def register(subparsers: cliargs.CommandSubparsers) -> None:
@@ -698,6 +791,12 @@ def register(subparsers: cliargs.CommandSubparsers) -> None:
         parser = subparsers.add_parser(name, help=help_text)
         if name != "verify":
             _add_adopt_arguments(parser)
+        else:
+            parser.add_argument(
+                "--hook",
+                action="store_true",
+                help="prek-hook mode: a repository without an adoption manifest is a no-op",
+            )
         parser.set_defaults(handler=handler)
 
 
@@ -822,6 +921,7 @@ def apply_main(args: argparse.Namespace) -> int:
                 if write.dest not in SHARED_DESTINATIONS
                 and write.dest not in corpus.EDITABLE_DESTINATIONS
                 and write.dest not in corpus.CONSUMER_CONFIG_DESTINATIONS
+                and write.dest not in corpus.SLOT_TEMPLATE_DESTINATIONS
             },
             editable=tuple(
                 sorted(
@@ -832,6 +932,8 @@ def apply_main(args: argparse.Namespace) -> int:
             ),
             pending_merges=plan.pending_merges,
             consumer_config=tuple(sorted(corpus.CONSUMER_CONFIG_DESTINATIONS)),
+            slot_templates=tuple(sorted(corpus.SLOT_TEMPLATE_DESTINATIONS)),
+            slot_guidance=plan.slot_guidance,
         ),
     )
     for line in (*plan.skipped, *plan.notes):
@@ -926,8 +1028,12 @@ def _consumer_config_drift(root: str, manifest: AdoptManifest) -> list[str]:
     return problems
 
 
-def verify_main(_args: argparse.Namespace) -> int:
-    """``hdsh adopt verify`` entry point."""
+def verify_main(args: argparse.Namespace) -> int:
+    """``hdsh adopt verify`` entry point.
+
+    With ``--hook``, a repository without an adoption manifest is a no-op
+    success — the always-run hook must not fail where nothing was adopted.
+    """
     try:
         root = _repository_root()
     except AdoptError as error:
@@ -936,6 +1042,9 @@ def verify_main(_args: argparse.Namespace) -> int:
     try:
         manifest = load_manifest(root)
     except ManifestError as error:
+        if args.hook and not Path(root, MANIFEST_PATH).exists():
+            print(f"{TOOL}: no adoption manifest; nothing to verify")
+            return 0
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
     drift: list[str] = _consumer_config_drift(root, manifest)
@@ -956,7 +1065,17 @@ def verify_main(_args: argparse.Namespace) -> int:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if PLACEHOLDER_MARKER in line:
                 placeholders.append(f"{dest}:{number}: {line.strip()}")
-    sources = tuple(sorted(manifest.files.keys() | set(manifest.editable)))
+    for dest in manifest.slot_templates:
+        path = Path(root, dest)
+        if not path.exists():
+            drift.append(f"{dest}: missing")
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if PLACEHOLDER_MARKER in line:
+                placeholders.append(f"{dest}:{number}: {line.strip()}")
+    sources = tuple(
+        sorted(manifest.files.keys() | set(manifest.editable) | set(manifest.slot_templates))
+    )
     for dest in manifest.pending_merges:
         path = Path(root, dest)
         if not path.exists():

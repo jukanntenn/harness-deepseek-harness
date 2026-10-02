@@ -87,6 +87,36 @@ class TestLoadManifest:
         with pytest.raises(ManifestError, match="consumerConfig list"):
             load_manifest(str(tmp_path))
 
+    def test_malformed_slot_fields_raise(self, tmp_path: Path) -> None:
+        path = tmp_path / ".hdsh" / "adopt.manifest.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps(
+                {
+                    "hdshVersion": "0.1.0",
+                    "hdshRef": "v0.1.0",
+                    "files": {},
+                    "slotTemplates": "x",
+                }
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ManifestError, match="slotTemplates list"):
+            load_manifest(str(tmp_path))
+        path.write_text(
+            json.dumps(
+                {
+                    "hdshVersion": "0.1.0",
+                    "hdshRef": "v0.1.0",
+                    "files": {},
+                    "slotGuidance": {"dest": {"slot": 7}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ManifestError, match="slotGuidance object"):
+            load_manifest(str(tmp_path))
+
     def test_round_trip_preserves_state(self, tmp_path: Path) -> None:
         save_manifest(
             str(tmp_path),
