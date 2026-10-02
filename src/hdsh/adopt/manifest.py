@@ -45,6 +45,10 @@ class AdoptManifest:
     #: last apply — the baseline apply compares against to reset a slot whose
     #: upstream guidance changed.
     slot_guidance: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: The board binding anchor: the project number this adoption was bound
+    #: to. Verify compares it against ``config.json`` — a mismatch means the
+    #: consumer moved boards, and only an explicit rebind clears it.
+    project_anchor: int = 0
 
 
 class ManifestError(ValueError):
@@ -92,6 +96,7 @@ def load_manifest(root: str) -> AdoptManifest:
     consumer_config = value.get("consumerConfig", [])
     slot_templates = value.get("slotTemplates", [])
     slot_guidance = value.get("slotGuidance", {})
+    project_anchor = value.get("projectAnchor", 0)
     if not isinstance(hdsh_version, str) or not isinstance(hdsh_ref, str):
         msg = f"{MANIFEST_PATH} requires string hdshVersion and hdshRef fields"
         raise ManifestError(msg)
@@ -118,6 +123,13 @@ def load_manifest(root: str) -> AdoptManifest:
     ):
         msg = f"{MANIFEST_PATH} requires a slotTemplates list of paths"
         raise ManifestError(msg)
+    if (
+        isinstance(project_anchor, bool)
+        or not isinstance(project_anchor, int)
+        or project_anchor < 0
+    ):
+        msg = f"{MANIFEST_PATH} requires a non-negative integer projectAnchor"
+        raise ManifestError(msg)
     if not isinstance(slot_guidance, dict) or not all(
         isinstance(dest, str)
         and isinstance(slots, dict)
@@ -135,6 +147,7 @@ def load_manifest(root: str) -> AdoptManifest:
         consumer_config=tuple(consumer_config),
         slot_templates=tuple(slot_templates),
         slot_guidance={dest: dict(slots) for dest, slots in slot_guidance.items()},
+        project_anchor=project_anchor,
     )
 
 
@@ -153,6 +166,7 @@ def save_manifest(root: str, manifest: AdoptManifest) -> None:
         "pendingMerges": sorted(manifest.pending_merges),
         "consumerConfig": sorted(manifest.consumer_config),
         "slotTemplates": sorted(manifest.slot_templates),
+        "projectAnchor": manifest.project_anchor,
         "slotGuidance": {
             dest: dict(sorted(slots.items()))
             for dest, slots in sorted(manifest.slot_guidance.items())

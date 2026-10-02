@@ -6,14 +6,9 @@ This is the consumer-side operating manual: it leads a repository — usually th
 
 ## Phase 1 — install
 
-Run `hdsh adopt plan` with the parameters below, review the printed plan, then `hdsh adopt apply`. Both commands refuse loudly — one diagnostic per blocker — instead of guessing. Bootstrap hdsh itself from a pinned ref:
+Host-install hdsh (until PyPI publishes: `uv tool install "harness-deepseek-harness @ git+<url>@<ref>"`), confirm the toolchain with `hdsh adopt preflight`, then review `hdsh adopt plan` before `hdsh adopt apply`. Both refuse loudly — one diagnostic per blocker:
 
-```sh
-uvx --from "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>" \
-  hdsh adopt plan <parameters>
-```
-
-The parameters are `--hdsh-ref` (tag or full SHA; it pins every reference), `--account-type user|organization`, `--project-number`, `--project-title`, `--lifecycle-actor`, and `--time-zone`; the Project field names carry defaults. Apply writes the prek gate entry with the `.gitattributes` driver line, the two thin policy workflows, the policy `config.json`, the issue and pull-request templates, the RFC mechanism, all ten skills, the documentation standard and the i18n contract, templated `architecture.md` and `development.md` pairs, and — when no root `AGENTS.md` exists — a templated standing-orders file. It records every installed bilingual pair and writes `.hdsh/adopt.manifest.json`.
+Only the project number and title are hand-typed; the rest derive when absent (ref from the latest upstream tag, account type from the remote, actor from the gh identity, zone from the system), each derivation echoed, each flag an override, and a fully flagged run stays offline. Apply writes the prek gate entry with the `.gitattributes` driver line, the two thin policy workflows, the policy `config.json`, the issue and pull-request templates, the RFC mechanism, all ten skills, the documentation standard and the i18n contract, templated `architecture.md` and `development.md` pairs, and — when no root `AGENTS.md` exists — a templated standing-orders file. It records every installed bilingual pair and writes `.hdsh/adopt.manifest.json`.
 
 ## Phase 2 — the out-of-git checklist
 
@@ -30,4 +25,4 @@ Pair the repository's own README (translate the counterpart, then `hdsh pairing 
 
 ## Phase 4 — the local workflow layer
 
-Add hdsh to the project (`uv add "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>"` until PyPI publishes), then run `uv run hdsh worktree install` in each worktree for the prek hooks and the pairing merge driver. The managed hooks carry the `hdsh` group; a `--group`-filtered CI must include it or every gate silently drops out. Older actionlint misreports the `field_added`/`field_removed` triggers; bridge with `paths.ignore` until known. Upgrades rerun `hdsh adopt apply` under the newer ref. Generated files are upstream-owned: redirect local changes upstream instead of forking them.
+hdsh is host-installed (Phase 1); run `hdsh worktree install` per worktree for the hooks and the merge driver, which resolve it from PATH. The managed hooks carry the `hdsh` group; a `--group`-filtered CI must include it or every gate silently drops out. Older actionlint misreports the `field_added`/`field_removed` triggers; bridge with `paths.ignore` until known. Upgrades rerun `hdsh adopt apply` under the newer ref. Generated files are upstream-owned: redirect local changes upstream instead of forking them.

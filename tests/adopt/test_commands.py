@@ -514,6 +514,22 @@ class TestBlockers:
         assert plan_cli(*adopt_arguments()) == 1
         assert "previous adopt manifest is malformed" in capsys.readouterr().err
 
+    def test_invalid_optional_flags_still_block(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert plan_cli(*adopt_arguments("--account-type", "enterprise")) == 1
+        assert "is not one of ['user', 'organization']" in capsys.readouterr().err
+        assert plan_cli(*adopt_arguments("--time-zone", "Mars/Olympus")) == 1
+        assert "is not a known IANA zone" in capsys.readouterr().err
+
+    def test_absent_derivable_flags_without_config_block_with_named_guidance(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert plan_cli("--project-number", "3", "--project-title", "Consumer Issues") == 1
+        error = capsys.readouterr().err
+        assert "--hdsh-ref: the parameter could not be derived" in error
+        assert "--account-type: the parameter could not be derived" in error
+
     def test_refuses_invalid_parameters(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -656,6 +672,49 @@ class TestPrekBlockUnits:
     def test_append_to_content_without_a_trailing_newline(self) -> None:
         updated = _apply_prek_block("x = 1", _managed_prek_block("v1"))
         assert updated.startswith("x = 1\n")
+
+
+class TestWizardIntegration:
+    def test_every_explicit_flag_run_stays_offline_with_echoes(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert plan_cli(*adopt_arguments()) == 0
+        assert "resolved --hdsh-ref v0.1.0 (flag)" in capsys.readouterr().out
+
+    def test_apply_records_the_project_anchor(self, consumer: Repo) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        manifest = json.loads(
+            (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["projectAnchor"] == 3
+
+    def test_a_moved_board_is_an_anchor_conflict_naming_the_rebind(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        config = json.loads(target.read_text(encoding="utf-8"))
+        config["projectNumber"] = 9
+        target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        error = capsys.readouterr().err
+        assert "no longer matches the bound board 3" in error
+        assert "rerun hdsh adopt apply with the new number to rebind" in error
+
+    def test_a_matching_board_number_does_not_conflict(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        config = json.loads(target.read_text(encoding="utf-8"))
+        config["lifecycleActor"] = "renamed-bot"
+        target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 1  # placeholders remain
+        assert "no longer matches the bound board" not in capsys.readouterr().err
 
 
 class TestSlotTemplates:

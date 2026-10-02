@@ -18,12 +18,13 @@ import subprocess
 import sys
 import tomllib
 import zoneinfo
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from hdsh import __version__
-from hdsh.adopt import corpus
+from hdsh.adopt import corpus, wizard
 from hdsh.adopt.corpus import AdoptParameters
 from hdsh.adopt.manifest import (
     MANIFEST_PATH,
@@ -251,19 +252,27 @@ def _existing_issue_config(root: str, blockers: list[Blocker]) -> PolicyConfig |
 
 
 def _resolve_parameters(
-    root: str, arguments: argparse.Namespace, blockers: list[Blocker]
+    root: str,
+    arguments: argparse.Namespace,
+    blockers: list[Blocker],
+    echoes: list[str],
 ) -> AdoptParameters:
     """Validate the flag inputs and derive the resolved parameters.
 
     An existing ``config.json`` is a binding input: its values become the
-    parameters, every required flag contradicting a file value is a blocker —
+    parameters, every passed flag contradicting a file value is a blocker —
     adopt never guesses precedence — and its standard-set statuses are
-    checked rather than overwritten.
+    checked rather than overwritten. Absent flags derive through the wizard
+    (account type and lifecycle actor from the gh identity, the ref from the
+    latest upstream release tag, the time zone from the local system zone);
+    each resolution is echoed so a default the operator never saw cannot
+    pass silently, and a fully flagged run never touches the network.
 
     Args:
         root: Consumer repository root.
         arguments: Parsed leaf namespace with the adoption parameters.
         blockers: Collected blockers; invalid inputs append here.
+        echoes: Resolution echo lines for the plan and apply output.
 
     Returns:
         The parameters, carrying placeholder slugs when the origin remote is
@@ -279,7 +288,7 @@ def _resolve_parameters(
             )
         )
     owner, repository = slug if slug is not None else ("UNKNOWN", "UNKNOWN")
-    if arguments.account_type not in ACCOUNT_TYPES:
+    if arguments.account_type is not None and arguments.account_type not in ACCOUNT_TYPES:
         blockers.append(
             Blocker(
                 "--account-type",
@@ -287,16 +296,17 @@ def _resolve_parameters(
                 "Pass --account-type user or --account-type organization.",
             )
         )
-    try:
-        zoneinfo.ZoneInfo(arguments.time_zone)
-    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-        blockers.append(
-            Blocker(
-                "--time-zone",
-                f"{arguments.time_zone!r} is not a known IANA zone.",
-                "Pass the Project time zone, for example Asia/Shanghai.",
+    if arguments.time_zone is not None:
+        try:
+            zoneinfo.ZoneInfo(arguments.time_zone)
+        except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+            blockers.append(
+                Blocker(
+                    "--time-zone",
+                    f"{arguments.time_zone!r} is not a known IANA zone.",
+                    "Pass the Project time zone, for example Asia/Shanghai.",
+                )
             )
-        )
     if arguments.project_number < 1:
         blockers.append(
             Blocker(
@@ -307,6 +317,7 @@ def _resolve_parameters(
         )
     existing = _existing_issue_config(root, blockers)
     if existing is not None:
+        echoes.append("parameters resolved from the existing config.json (binding input)")
         for flag, field, flag_value, file_value in (
             ("--account-type", "accountType", arguments.account_type, existing.account_type),
             (
@@ -336,7 +347,7 @@ def _resolve_parameters(
                 existing.start_date_field,
             ),
         ):
-            if flag_value != file_value:
+            if flag_value is not None and flag_value != file_value:
                 blockers.append(
                     Blocker(
                         flag,
@@ -368,21 +379,66 @@ def _resolve_parameters(
             public_blob_root=arguments.public_blob_root
             or f"https://github.com/{owner}/{repository}/blob/main/",
         )
+    hdsh_ref = _resolve_or_block(
+        lambda: wizard.resolve_hdsh_ref(arguments.hdsh_ref, None), "--hdsh-ref", blockers, echoes
+    )
+    account_type = _resolve_or_block(
+        lambda: wizard.resolve_account_type(arguments.account_type, owner, repository, None),
+        "--account-type",
+        blockers,
+        echoes,
+    )
+    lifecycle_actor = _resolve_or_block(
+        lambda: wizard.resolve_lifecycle_actor(arguments.lifecycle_actor, None),
+        "--lifecycle-actor",
+        blockers,
+        echoes,
+    )
+    time_zone = _resolve_or_block(
+        lambda: wizard.resolve_time_zone(arguments.time_zone),
+        "--time-zone",
+        blockers,
+        echoes,
+    )
     return AdoptParameters(
-        hdsh_ref=arguments.hdsh_ref,
+        hdsh_ref=hdsh_ref,
         owner=owner,
         repository=repository,
-        account_type=arguments.account_type,
+        account_type=account_type,
         project_number=arguments.project_number,
         project_title=arguments.project_title,
-        lifecycle_actor=arguments.lifecycle_actor,
-        time_zone=arguments.time_zone,
+        lifecycle_actor=lifecycle_actor,
+        time_zone=time_zone,
         priority_field=arguments.priority_field,
         start_date_field=arguments.start_date_field,
         allow_unassigned_owner=arguments.allow_unassigned_owner,
         public_blob_root=arguments.public_blob_root
         or f"https://github.com/{owner}/{repository}/blob/main/",
     )
+
+
+def _resolve_or_block(
+    resolve: Callable[[], wizard.Resolution], flag: str, blockers: list[Blocker], echoes: list[str]
+) -> str:
+    """Resolve one parameter, converting wizard failure into a blocker.
+
+    Args:
+        resolve: The wizard resolution to run.
+        flag: The flag named in the blocker diagnostic.
+        blockers: Collected blockers; a failed derivation appends here.
+        echoes: Resolution echoes, appended on success.
+
+    Returns:
+        The resolved value, or ``""`` when the derivation failed (the
+        appended blocker aborts the run before any write).
+    """
+    try:
+        resolution = resolve()
+    except wizard.WizardError as error:
+        blockers.append(Blocker(flag, f"the parameter could not be derived ({error}).", str(error)))
+        return ""
+    echoes.append(f"resolved {resolution.echo}")
+    return resolution.value
 
 
 def _pair_writes(anchor: str, installed: frozenset[str], hdsh_ref: str) -> list[PlannedWrite]:
@@ -413,13 +469,13 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
             proceed safely.
     """
     blockers: list[Blocker] = []
-    parameters = _resolve_parameters(root, arguments, blockers)
+    notes: list[str] = []
+    parameters = _resolve_parameters(root, arguments, blockers, notes)
     installed = corpus.installed_destinations(today)
     writes: list[PlannedWrite] = []
     records: list[str] = []
     skipped: list[str] = []
     pending_merges: list[str] = []
-    notes: list[str] = []
 
     status = _run_git(root, "status", "--porcelain")
     if status.stdout.strip():
@@ -805,13 +861,13 @@ def _add_adopt_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--hdsh-ref",
         metavar="<ref>",
-        required=True,
+        default=None,
         help="pinned git ref of harness-deepseek-harness (tag or full SHA)",
     )
     parser.add_argument(
         "--account-type",
         metavar="<flavor>",
-        required=True,
+        default=None,
         help="deployment flavor: user or organization",
     )
     parser.add_argument(
@@ -830,13 +886,13 @@ def _add_adopt_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--lifecycle-actor",
         metavar="<login>",
-        required=True,
+        default=None,
         help="the identity whose Project mutations the lifecycle trusts",
     )
     parser.add_argument(
         "--time-zone",
         metavar="<zone>",
-        required=True,
+        default=None,
         help="IANA time zone of the Project (for example Asia/Shanghai)",
     )
     parser.add_argument(
@@ -934,6 +990,7 @@ def apply_main(args: argparse.Namespace) -> int:
             consumer_config=tuple(sorted(corpus.CONSUMER_CONFIG_DESTINATIONS)),
             slot_templates=tuple(sorted(corpus.SLOT_TEMPLATE_DESTINATIONS)),
             slot_guidance=plan.slot_guidance,
+            project_anchor=plan.parameters.project_number,
         ),
     )
     for line in (*plan.skipped, *plan.notes):
@@ -1015,6 +1072,12 @@ def _consumer_config_drift(root: str, manifest: AdoptManifest) -> list[str]:
                 )
             if tuple(config.statuses) != corpus.STANDARD_STATUSES:
                 problems.append(f"{dest}: statuses differ from the standard set")
+            if manifest.project_anchor and config.project_number != manifest.project_anchor:
+                problems.append(
+                    f"{dest}: projectNumber {config.project_number} no longer matches the "
+                    f"bound board {manifest.project_anchor}; if the board moved deliberately, "
+                    "rerun hdsh adopt apply with the new number to rebind"
+                )
         elif dest == ".hdsh/pairing.manifest.json":
             try:
                 parse_pairing_manifest(text)

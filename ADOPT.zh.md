@@ -6,14 +6,9 @@
 
 ## 阶段 1 —— 安装
 
-带着下述参数运行 `hdsh adopt plan`，审阅打印出的计划，再运行 `hdsh adopt apply`。两个命令都显性失败——每个阻塞一条诊断——绝不猜测。hdsh 自身从钉住的 ref 引导：
+先主机安装 hdsh（PyPI 发布前用 `uv tool install "harness-deepseek-harness @ git+<url>@<ref>"`），用 `hdsh adopt preflight` 确认工具链，审阅 `hdsh adopt plan` 后再 `hdsh adopt apply`。两者都显性失败——每个阻塞一条诊断：
 
-```sh
-uvx --from "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>" \
-  hdsh adopt plan <parameters>
-```
-
-参数为 `--hdsh-ref`（tag 或完整 SHA；钉住全部引用）、`--account-type user|organization`、`--project-number`、`--project-title`、`--lifecycle-actor`、`--time-zone`；Project 字段名有默认值。apply 写入 prek 门禁条目与 `.gitattributes` 驱动行、两个薄策略 workflow、策略 `config.json`、issue 与 pull-request 模板、RFC 机制、全部十个 skill、文档标准与 i18n 契约、模板化的 `architecture.md` 与 `development.md` 配对，并在没有根 `AGENTS.md` 时写入模板化的常令文件。它会记录每一对已安装的双语配对，并写下 `.hdsh/adopt.manifest.json`。
+只有 Project 编号与标题需要手输；其余缺省时自动推导（ref 取上游最新 tag、账户类型取 remote、actor 取 gh 身份、时区取系统），每个推导回显、每个旗标可覆盖、全旗标运行离线。apply 写入 prek 门禁条目与 `.gitattributes` 驱动行、两个薄策略 workflow、策略 `config.json`、issue 与 pull-request 模板、RFC 机制、全部十个 skill、文档标准与 i18n 契约、模板化的 `architecture.md` 与 `development.md` 配对，并在没有根 `AGENTS.md` 时写入模板化的常令文件。它会记录每一对已安装的双语配对，并写下 `.hdsh/adopt.manifest.json`。
 
 ## 阶段 2 —— git 外清单
 
@@ -30,4 +25,4 @@ apply 看不到 GitHub 上的仓库状态；消费方的 agent 执行以下各�
 
 ## 阶段 4 —— 本地工作流层
 
-把 hdsh 加入项目（PyPI 发布前用 `uv add "harness-deepseek-harness @ git+https://github.com/jukanntenn/harness-deepseek-harness@<ref>"`），再在每个 worktree 运行 `uv run hdsh worktree install` 安装 prek 钩子与配对合并驱动。托管钩子带有 `hdsh` 组；带过滤的 CI 必须包含它，否则所有门禁静默退出运行。较旧的 actionlint 会误报 `field_added`、`field_removed` 触发器；以其认识这些类型为移除条件，用 `paths.ignore` 过渡。升级以更新的 ref 重跑 `hdsh adopt apply`。生成文件归上游所有：本地改动请引回上游，不要分叉。
+hdsh 已在 Phase 1 主机安装；每个 worktree 运行一次 `hdsh worktree install` 装 prek 钩子与配对合并驱动，二者从 PATH 解析它。托管钩子带有 `hdsh` 组；带过滤的 CI 必须包含它，否则所有门禁静默退出运行。较旧的 actionlint 会误报 `field_added`、`field_removed` 触发器；以其认识这些类型为移除条件，用 `paths.ignore` 过渡。升级以更新的 ref 重跑 `hdsh adopt apply`。生成文件归上游所有：本地改动请引回上游，不要分叉。

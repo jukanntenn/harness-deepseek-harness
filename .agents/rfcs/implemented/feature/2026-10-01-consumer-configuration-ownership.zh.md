@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-三个被安装的文件把上游渲染的字节与每仓库值混在一处，而 adopt manifest 按字节钉死它们：`.hdsh/pairing.manifest.json`——其 `excluded`、`generated`、`public_blob_root` 字段是文档明载的消费方机制——加上 `.hdsh/docs.manifest.json` 与 `.github/issue-management/config.json`。第一个按文档行使机制的消费方（把 `.zcode/README.md` 排除出语料）落进永久死锁：adopt verify 永远报 drift，之后的 re-apply 被 clobber 检查拒绝，而其引导——还原本地改动、或把改动重定向上游——对仓库专属的排除项根本不可执行。根因在所有权而非钉死：这些文件里的种子项（英文单语排除集、标准 wrap 与 links glob）是穿着配置外衣的语料常量，字节钉死在保住种子的同时把消费方的值一并扣押。同样的钉死让改一个 Project 编号或时区变成全部生成文件的完整重跑。被扩展的配置面归[配对门禁 RFC](../process/2026-09-07-bilingual-pairing-gate.zh.md) 与[文档语料门禁 RFC](../process/2026-09-07-document-corpus-gates.zh.md) 所有；绑定行为归[引导式接入 RFC](../../proposed/feature/2026-10-01-guided-adoption-wizard.zh.md)。
+三个被安装的文件把上游渲染的字节与每仓库值混在一处，而 adopt manifest 按字节钉死它们：`.hdsh/pairing.manifest.json`——其 `excluded`、`generated`、`public_blob_root` 字段是文档明载的消费方机制——加上 `.hdsh/docs.manifest.json` 与 `.github/issue-management/config.json`。第一个按文档行使机制的消费方（把 `.zcode/README.md` 排除出语料）落进永久死锁：adopt verify 永远报 drift，之后的 re-apply 被 clobber 检查拒绝，而其引导——还原本地改动、或把改动重定向上游——对仓库专属的排除项根本不可执行。根因在所有权而非钉死：这些文件里的种子项（英文单语排除集、标准 wrap 与 links glob）是穿着配置外衣的语料常量，字节钉死在保住种子的同时把消费方的值一并扣押。同样的钉死让改一个 Project 编号或时区变成全部生成文件的完整重跑。被扩展的配置面归[配对门禁 RFC](../process/2026-09-07-bilingual-pairing-gate.zh.md) 与[文档语料门禁 RFC](../process/2026-09-07-document-corpus-gates.zh.md) 所有；绑定行为归[引导式接入 RFC](2026-10-01-guided-adoption-wizard.zh.md)。
 
 ## 决策
 

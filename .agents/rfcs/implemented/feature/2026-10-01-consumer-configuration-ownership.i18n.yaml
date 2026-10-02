@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/feature/2026-10-01-consumer-configuration-ownership.md
-2026-10-01-consumer-configuration-ownership.md: 3b2e780003fcae540720382ab3d50646fba6bedf
-2026-10-01-consumer-configuration-ownership.zh.md: 5d32b46dc2739b5046f389d9e202eb122817d2be
+2026-10-01-consumer-configuration-ownership.md: 4e273efcd3dd32db1b56308721f9b019ea14048d
+2026-10-01-consumer-configuration-ownership.zh.md: 27b49307ded24d0caf6201a3a4e3af8e406049ac
