@@ -28,9 +28,9 @@ from typing import TYPE_CHECKING, Literal
 
 from hdsh.pairing import links as pairing_links
 from hdsh.pairing import structure as pairing_structure
-from hdsh.pairing.corpus import is_scope_file
+from hdsh.pairing.corpus import corpus_file_predicate
 from hdsh.pairing.git import GitError, run_git
-from hdsh.pairing.manifest import MANIFEST_PATH, manifest_excluded, parse_manifest
+from hdsh.pairing.manifest import MANIFEST_PATH, parse_manifest
 from hdsh.pairing.records import anchor_of_argument, pair_paths, parse_record
 from hdsh.pairing.structure import parse_markdown
 from hdsh.pairing.verify import PairingRepository
@@ -924,19 +924,19 @@ def _diff_texts(root: str, before: str, after: str) -> str:
     ).strip()
 
 
-def _load_pair(root: str, anchor: str, excluded: ExclusionPredicate) -> _PairState | str:
+def _load_pair(root: str, anchor: str, is_corpus_file: ExclusionPredicate) -> _PairState | str:
     """Load one pair's recorded and current state, or explain the problem.
 
     Args:
         root: Absolute repository root.
         anchor: English anchor path.
-        excluded: Manifest exclusion predicate.
+        is_corpus_file: Active corpus membership predicate.
 
     Returns:
         The pair state, or a human-readable problem message.
     """
     paths = pair_paths(anchor)
-    if not is_scope_file(anchor) or excluded(anchor):
+    if not is_corpus_file(anchor):
         return f"{anchor}: not an in-scope documentation pair (docs/i18n/README.md)"
     missing = [
         file for file in (paths.source, paths.zh, paths.meta) if not Path(root, file).is_file()
@@ -1228,11 +1228,8 @@ def _run(
         stderr(f"{TOOL}: {TERMINOLOGY_PATH} is missing from the repository root")
         return 2
 
-    def excluded(file: str) -> bool:
-        return manifest_excluded(file, manifest)
-
-    def is_pair_source(path: str) -> bool:
-        return is_scope_file(path) and not excluded(path)
+    is_corpus_file = corpus_file_predicate(manifest)
+    is_pair_source = is_corpus_file
 
     if requested:
         selected = sorted({anchor_of_argument(argument) for argument in requested})
@@ -1240,7 +1237,7 @@ def _run(
         repository = PairingRepository(root)
         selected = sorted(
             path[: -len(".i18n.yaml")] + ".md"
-            for path in repository.discover_scope_files()
+            for path in repository.discover_scope_files(is_corpus_file)
             if path.endswith(".i18n.yaml")
         )
 
@@ -1248,7 +1245,7 @@ def _run(
     problems: list[str] = []
     skipped: list[str] = []
     for anchor in selected:
-        loaded = _load_pair(root, anchor, excluded)
+        loaded = _load_pair(root, anchor, is_corpus_file)
         if isinstance(loaded, str):
             if requested:
                 problems.append(loaded)

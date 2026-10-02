@@ -63,7 +63,6 @@ class TestManifestParsing:
         [
             '{"markdownWrap": 3}',
             '{"markdownWrap": {"include": ["a"]}}',
-            '{"markdownWrap": {"include": [], "exclude": []}}',
             '{"markdownWrap": {"include": "docs/**", "exclude": []}}',
             '{"markdownWrap": {"include": [3], "exclude": []}}',
             '{"markdownWrap": {"include": ["a"], "exclude": "draft"}}',

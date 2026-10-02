@@ -198,6 +198,188 @@ class TestApplyRoundTrip:
         assert manifest["pendingMerges"] == ["AGENTS.md"]
 
 
+class TestConsumerConfigOwnership:
+    def test_consumer_config_files_are_never_pinned_or_refused(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pairing_manifest = (
+            json.dumps({"excluded": [".zcode/"], "generated": [], "public_blob_root": ""}, indent=2)
+            + "\n"
+        )
+        (consumer.root / ".hdsh").mkdir()
+        (consumer.root / ".hdsh" / "pairing.manifest.json").write_text(
+            pairing_manifest, encoding="utf-8"
+        )
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "consumer manifest", cwd=consumer.root)
+        assert apply_cli(*adopt_arguments()) == 0
+        assert (consumer.root / ".hdsh" / "pairing.manifest.json").read_text(
+            encoding="utf-8"
+        ) == pairing_manifest
+        manifest = json.loads(
+            (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
+        )
+        assert ".hdsh/pairing.manifest.json" not in manifest["files"]
+        assert ".hdsh/docs.manifest.json" not in manifest["files"]
+        assert ".github/issue-management/config.json" not in manifest["files"]
+        assert ".hdsh/pairing.manifest.json" in manifest["consumerConfig"]
+        capsys.readouterr()
+        assert verify_cli() == 1  # placeholders remain, but no drift
+        error = capsys.readouterr().err
+        assert "0 drift item(s)" in error
+
+    def test_existing_config_json_binds_its_values(self, consumer: Repo) -> None:
+        config = _consumer_config(
+            project_number=9, title="Renamed Board", actor="other-bot", zone="Asia/Tokyo"
+        )
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        target.parent.mkdir(parents=True)
+        target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "hand-authored config", cwd=consumer.root)
+        arguments = adopt_arguments(
+            "--project-number",
+            "9",
+            "--project-title",
+            "Renamed Board",
+            "--lifecycle-actor",
+            "other-bot",
+            "--time-zone",
+            "Asia/Tokyo",
+        )
+        assert apply_cli(*arguments) == 0
+        assert json.loads(target.read_text(encoding="utf-8"))["projectNumber"] == 9
+        rendered = (consumer.root / ".github" / "workflows" / "issue-policy.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "secrets.HDSH_ISSUE_PROJECT_TOKEN" in rendered
+
+    def test_conflicting_flag_against_existing_config_json_blocks(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        target.parent.mkdir(parents=True)
+        target.write_text(json.dumps(_consumer_config(), indent=2) + "\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "hand-authored config", cwd=consumer.root)
+        assert plan_cli(*adopt_arguments("--project-number", "4")) == 1
+        assert "contradicts the existing config.json projectNumber value '3'" in (
+            capsys.readouterr().err
+        )
+
+    def test_malformed_existing_config_json_blocks(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        target.parent.mkdir(parents=True)
+        target.write_text("{ broken\n", encoding="utf-8")
+        assert plan_cli(*adopt_arguments()) == 1
+        assert "malformed" in capsys.readouterr().err
+
+    def test_existing_config_json_with_nonstandard_statuses_blocks(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config = _consumer_config()
+        config["statuses"] = ["Inbox", "In progress", "In review", "Done"]
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        target.parent.mkdir(parents=True)
+        target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "hand-authored config", cwd=consumer.root)
+        assert plan_cli(*adopt_arguments()) == 1
+        assert "standard set" in capsys.readouterr().err
+
+    def test_verify_reports_consumer_config_structure_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        (consumer.root / ".hdsh" / "pairing.manifest.json").write_text(
+            "{ broken\n", encoding="utf-8"
+        )
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert ".hdsh/pairing.manifest.json: invalid" in capsys.readouterr().err
+
+    def test_verify_reports_config_json_repository_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        config = json.loads(target.read_text(encoding="utf-8"))
+        config["repository"] = "renamed-repo"
+        target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert "does not match the origin remote" in capsys.readouterr().err
+
+    def test_verify_reports_invalid_config_json_as_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        target.write_text('{"owner": "x"}\n', encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert ".github/issue-management/config.json: invalid" in capsys.readouterr().err
+
+    def test_verify_reports_status_set_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        target = consumer.root / ".github" / "issue-management" / "config.json"
+        config = json.loads(target.read_text(encoding="utf-8"))
+        config["statuses"] = ["Inbox", "In progress", "In review", "Done"]
+        target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert "statuses differ from the standard set" in capsys.readouterr().err
+
+    def test_verify_reports_invalid_docs_manifest_as_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        (consumer.root / ".hdsh" / "docs.manifest.json").write_text("{ broken\n", encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert ".hdsh/docs.manifest.json: invalid" in capsys.readouterr().err
+
+    def test_verify_reports_missing_consumer_config_as_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        (consumer.root / ".hdsh" / "docs.manifest.json").unlink()
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert ".hdsh/docs.manifest.json: missing" in capsys.readouterr().err
+
+
+def _consumer_config(
+    project_number: int = 3,
+    title: str = "Consumer Issues",
+    actor: str = "consumer-bot",
+    zone: str = "Asia/Shanghai",
+) -> dict[str, object]:
+    return {
+        "owner": "consumer-org",
+        "accountType": "user",
+        "repository": "consumer-repo",
+        "projectNumber": project_number,
+        "projectTitle": title,
+        "lifecycleActor": actor,
+        "priorityField": "Priority",
+        "startDateField": "Start date",
+        "projectTimeZone": zone,
+        "allowUnassignedOwner": False,
+        "statuses": ["Inbox", "Backlog", "Ready", "In progress", "In review", "Done", "No action"],
+    }
+
+
 class TestBlockers:
     def test_refuses_outside_a_git_work_tree(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

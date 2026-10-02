@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 import hdsh.docs.wrap as wrap_module
-from hdsh.docs.config import DocsConfigError
 from hdsh.docs.wrap import main, run
 from tests.helpers import Repo, parse_command
 
@@ -46,10 +45,10 @@ class TestWrapGate:
         assert f"docs/a.md:3  {'x' * 80}…" in captured.err
         assert "docs/b.md:3  short first line" in captured.err
 
-    def test_missing_section_refuses_to_run(self, repo: Repo) -> None:
-        write_manifest(repo, docBudgets={"AGENTS.md": 5})
-        with pytest.raises(DocsConfigError, match="markdownWrap section is required"):
-            run(repo.root)
+    def test_absent_section_covers_the_standard_corpus(self, repo: Repo) -> None:
+        write_manifest(repo, docBudgets={"AGENTS.md": 500})
+        repo.write("README.md", "# T\n\nhard\nwrapped\n")
+        assert run(repo.root) == 1
 
     def test_main_returns_zero_on_green_corpus(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
@@ -62,10 +61,10 @@ class TestWrapGate:
     def test_main_exits_two_on_config_error(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        repo.write(".hdsh/docs.manifest.json", "{}\n")
+        repo.write(".hdsh/docs.manifest.json", "{ markdownWrap: broken\n")
         monkeypatch.chdir(repo.root)
         assert wrap_cli() == 2
-        assert "markdownWrap" in capsys.readouterr().err
+        assert "docs.manifest.json" in capsys.readouterr().err
 
     def test_extra_arguments_are_rejected(self) -> None:
         with pytest.raises(ValueError, match="unrecognized arguments"):

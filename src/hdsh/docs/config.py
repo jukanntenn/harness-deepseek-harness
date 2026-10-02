@@ -40,6 +40,40 @@ class CorpusScope:
     exclude: tuple[str, ...]
 
 
+#: The standard corpus every documentation gate covers without any manifest
+#: section — the governance surface hdsh itself defines. Manifest sections
+#: extend it per repository; they cannot shrink or replace it.
+STANDARD_SCOPE = CorpusScope(
+    include=(
+        "README.md",
+        "AGENTS.md",
+        "docs/**/*.md",
+        ".agents/rfcs/**/*.md",
+        ".agents/skills/**/*.md",
+    ),
+    exclude=(".agents/rfcs/archived/**",),
+)
+
+
+def effective_scope(section: CorpusScope | None) -> CorpusScope:
+    """Resolve one gate's scope: the standard corpus plus any consumer extension.
+
+    Args:
+        section: The manifest's section for this gate, or ``None`` when the
+            consumer added no extension.
+
+    Returns:
+        The standard corpus when the section is absent, otherwise the
+        standard corpus unioned with the section's includes and excludes.
+    """
+    if section is None:
+        return STANDARD_SCOPE
+    return CorpusScope(
+        include=(*STANDARD_SCOPE.include, *section.include),
+        exclude=(*STANDARD_SCOPE.exclude, *section.exclude),
+    )
+
+
 @dataclass(frozen=True)
 class DocsManifest:
     """Validated fields of ``.hdsh/docs.manifest.json``.
@@ -80,12 +114,10 @@ def _parse_scope(section: str, value: Any) -> CorpusScope:  # noqa: ANN401 - val
         raise ValueError(msg)
     include = value["include"]
     exclude = value["exclude"]
-    if (
-        not isinstance(include, list)
-        or not include
-        or not all(isinstance(pattern, str) and pattern for pattern in include)
+    if not isinstance(include, list) or not all(
+        isinstance(pattern, str) and pattern for pattern in include
     ):
-        msg = f"{section}.include must be a non-empty array of non-empty glob strings"
+        msg = f"{section}.include must be an array of non-empty glob strings (may be empty)"
         raise ValueError(msg)
     if not isinstance(exclude, list) or not all(
         isinstance(pattern, str) and pattern for pattern in exclude

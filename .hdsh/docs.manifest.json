@@ -1,34 +1,4 @@
 {
-  "markdownWrap": {
-    "include": [
-      "README.md",
-      "README.zh.md",
-      "AGENTS.md",
-      "docs/**/*.md",
-      ".agents/rfcs/**/*.md",
-      ".agents/skills/**/*.md",
-      "ADOPT.md",
-      "ADOPT.zh.md"
-    ],
-    "exclude": [
-      ".agents/rfcs/archived/**"
-    ]
-  },
-  "markdownLinks": {
-    "include": [
-      "README.md",
-      "README.zh.md",
-      "AGENTS.md",
-      "docs/**/*.md",
-      ".agents/rfcs/**/*.md",
-      ".agents/skills/**/*.md",
-      "ADOPT.md",
-      "ADOPT.zh.md"
-    ],
-    "exclude": [
-      ".agents/rfcs/archived/**"
-    ]
-  },
   "docBudgets": {
     "AGENTS.md": 870,
     "docs/AGENTS.md": 1100,

@@ -7,7 +7,6 @@ import json
 import pytest
 
 import hdsh.docs.links as links_module
-from hdsh.docs.config import DocsConfigError
 from hdsh.docs.corpus import CorpusFile
 from hdsh.docs.links import AnchorCache, main, run
 from hdsh.docs.links import find_violations as find_link_violations
@@ -155,18 +154,18 @@ class TestLinksGate:
         assert run(repo.root) == 1
         assert "docs/scan.md:5  gone.md  (target does not exist)" in capsys.readouterr().err
 
-    def test_missing_section_refuses_to_run(self, repo: Repo) -> None:
-        write_manifest(repo, markdownWrap={"include": ["docs/**/*.md"], "exclude": []})
-        with pytest.raises(DocsConfigError, match="markdownLinks section is required"):
-            run(repo.root)
+    def test_absent_section_covers_the_standard_corpus(self, repo: Repo) -> None:
+        write_manifest(repo, docBudgets={"AGENTS.md": 500})
+        repo.write("README.md", "# T\n\nSee [gone](missing.md).\n")
+        assert run(repo.root) == 1
 
     def test_main_exits_two_on_config_error(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        write_manifest(repo, markdownWrap={"include": ["docs/**/*.md"], "exclude": []})
+        repo.write(".hdsh/docs.manifest.json", "{ markdownLinks: broken\n")
         monkeypatch.chdir(repo.root)
         assert links_cli() == 2
-        assert "markdownLinks" in capsys.readouterr().err
+        assert "docs.manifest.json" in capsys.readouterr().err
 
     def test_extra_arguments_are_rejected(self) -> None:
         with pytest.raises(ValueError, match="unrecognized arguments"):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from hdsh.pairing.corpus import is_scope_file, pair_source_predicate
+from hdsh.pairing.corpus import corpus_file_predicate, is_scope_file, pair_source_predicate
 from hdsh.pairing.manifest import parse_manifest
 
 
@@ -19,6 +19,12 @@ class TestScope:
         assert not is_scope_file("node_modules/x/README.md")
         assert not is_scope_file(".local/contexts/prek/README.md")
         assert not is_scope_file("src/hdsh/__init__.py")
+
+    def test_english_only_corpus_constants_are_out_of_scope(self) -> None:
+        assert not is_scope_file("docs/AGENTS.md")
+        assert not is_scope_file(".agents/rfcs/AGENTS.md")
+        assert not is_scope_file("docs/i18n/terminology.md")
+        assert not is_scope_file("docs/i18n/style-samples.md")
 
     def test_packaged_adoption_mirrors_are_discovery_exclusions(self) -> None:
         assert not is_scope_file("src/hdsh/adopt/templates/mirrors/.agents/rfcs/README.md")
@@ -41,6 +47,27 @@ class TestScope:
         predicate = pair_source_predicate(manifest)
         assert not predicate("docs/guide.md")
         assert predicate("docs/other.md")
+
+    def test_roots_extend_the_corpus(self) -> None:
+        manifest = parse_manifest('{"roots": ["specs/"]}')
+        predicate = corpus_file_predicate(manifest)
+        assert predicate("specs/README.md")
+        assert predicate("specs/backend/agent-distribution.zh.md")
+        assert predicate("docs/guide.md")
+        assert not predicate("specifications/guide.md")
+
+    def test_governed_leaves_the_corpus_with_translations_allowed(self) -> None:
+        manifest = parse_manifest('{"governed": ["specs/"]}')
+        predicate = corpus_file_predicate(manifest)
+        assert not predicate("specs/README.md")
+        assert not predicate("specs/README.zh.md")
+        assert predicate("docs/guide.md")
+
+    def test_excluded_wins_over_roots(self) -> None:
+        manifest = parse_manifest('{"roots": ["specs/"], "excluded": ["specs/internal/"]}')
+        predicate = corpus_file_predicate(manifest)
+        assert predicate("specs/guide.md")
+        assert not predicate("specs/internal/guide.md")
 
 
 class TestScopeMatrix:

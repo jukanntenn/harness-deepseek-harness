@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING
 
 from hdsh.docs.config import (
     DocsConfigError,
+    effective_scope,
     load_docs_manifest,
-    missing_section_error,
 )
 from hdsh.docs.corpus import CorpusFile, discover_corpus_files, find_repository_root
 from hdsh.docs.markdown import (
@@ -126,9 +126,7 @@ def run(root: Path) -> int:
         The exit code: 0 green, 1 violations found.
     """
     manifest = load_docs_manifest(root)
-    if manifest.markdown_links is None:
-        raise missing_section_error("markdownLinks", TOOL)
-    files = discover_corpus_files(root, manifest.markdown_links)
+    files = discover_corpus_files(root, effective_scope(manifest.markdown_links))
     anchors_of = AnchorCache()
     violations: list[BrokenLinkViolation] = []
     for file in files:

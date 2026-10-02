@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 import hdsh.pairing.verify as tp_verify_module
+from hdsh.pairing.corpus import corpus_file_predicate
+from hdsh.pairing.manifest import parse_manifest
 from hdsh.pairing.verify import (
     PairingRepository,
     PairingRequest,
@@ -19,7 +21,16 @@ from hdsh.pairing.verify import (
     run_gate,
     verify_request,
 )
-from tests.helpers import EN_PAIR, MANIFEST, Repo, en_pair, parse_command, write_pair, zh_pair
+from tests.helpers import (
+    EN_PAIR,
+    MANIFEST,
+    Repo,
+    en_pair,
+    parse_command,
+    write_manifest,
+    write_pair,
+    zh_pair,
+)
 
 _REQUEST_BUILDERS = {
     "verify": verify_request,
@@ -313,6 +324,58 @@ class TestListMode:
         assert f"{'out-of-sync':<11} docs/guide.md" in "\n".join(out)
 
 
+class TestExcludedSourcesStayUnchecked:
+    def test_corpus_check_skips_manifest_excluded_sources(self, repo: Repo) -> None:
+        repo.write("docs/guide.zh.md", zh_pair("guide.md"))
+        write_manifest(repo, {"excluded": ["docs/guide.md"]})
+        code, _, err = run(repo, "verify")
+        assert code == 1
+        assert any("excluded from pairing" in line for line in err)
+        assert not any("must merge bilingual" in line for line in err)
+
+    def test_record_all_skips_manifest_excluded_sources(self, repo: Repo) -> None:
+        repo.write("docs/guide.zh.md", zh_pair("guide.md"))
+        write_manifest(repo, {"excluded": ["docs/guide.md"]})
+        code, _, err = run(repo, "record", "--all")
+        assert code == 0, err
+        assert not (repo.root / "docs/guide.i18n.yaml").exists()
+
+
+class TestCorpusExtension:
+    def test_roots_admit_a_consumer_document_tree(self, repo: Repo) -> None:
+        readme = (
+            "# Specs\n\nEnglish | [中文](README.zh.md)\n\n"
+            "See [distribution](backend/agent-distribution.md).\n"
+        )
+        readme_zh = (
+            "# 规格\n\n[English](README.md) | 中文\n\n"
+            "参见[分发](backend/agent-distribution.zh.md)。\n"
+        )
+        repo.write("specs/README.md", readme)
+        repo.write("specs/README.zh.md", readme_zh)
+        write_pair(repo, "specs/backend/agent-distribution.md")
+        write_manifest(repo, {"excluded": [], "roots": ["specs/"]})
+        record(repo, "specs/README.md")
+        record(repo, "specs/backend/agent-distribution.md")
+        code, _, err = run(repo, "verify")
+        assert code == 0, err
+
+    def test_without_roots_the_same_tree_stays_out_and_red(self, repo: Repo) -> None:
+        repo.write("specs/README.md", "# Specs\n\ncontent\n")
+        repo.write("specs/README.zh.md", "# 规格\n\n内容\n")
+        write_manifest(repo, {"excluded": []})
+        code, _, err = run(repo, "verify")
+        assert code == 1
+        assert any("specs/README.md: incomplete pair" in line for line in err)
+
+    def test_governed_content_keeps_translations_without_checks(self, repo: Repo) -> None:
+        repo.write("specs/README.md", "# Specs\n\nany content\n")
+        repo.write("specs/README.zh.md", "# 规格\n\n任意内容，没有切换行\n")
+        write_manifest(repo, {"excluded": [], "governed": ["specs/"]})
+        code, _, err = run(repo, "verify")
+        assert code == 0, err
+
+
 class TestPairsScope:
     def test_named_pair_check_only(self, repo: Repo) -> None:
         write_pair(repo, "docs/guide.md")
@@ -423,9 +486,11 @@ class TestVerifyPlanes:
         repo.write(".local/contexts/prek/README.md", "# y\n")
         repo.write("docs/guide.md", en_pair("guide.zh.md"))
         repository = PairingRepository(str(repo.root))
-        assert "docs/guide.md" in repository.discover_scope_files()
-        assert "node_modules/x/README.md" not in repository.discover_scope_files()
-        assert ".local/contexts/prek/README.md" not in repository.discover_scope_files()
+        is_corpus_file = corpus_file_predicate(parse_manifest('{"excluded": []}'))
+        discovered = repository.discover_scope_files(is_corpus_file)
+        assert "docs/guide.md" in discovered
+        assert "node_modules/x/README.md" not in discovered
+        assert ".local/contexts/prek/README.md" not in discovered
 
     def test_write_unreadable_pair_fails_loud(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch

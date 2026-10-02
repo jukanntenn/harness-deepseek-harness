@@ -75,6 +75,18 @@ class TestLoadManifest:
         with pytest.raises(ManifestError, match="pendingMerges list"):
             load_manifest(str(tmp_path))
 
+    def test_malformed_consumer_config_list_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / ".hdsh" / "adopt.manifest.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps(
+                {"hdshVersion": "0.1.0", "hdshRef": "v0.1.0", "files": {}, "consumerConfig": 3}
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ManifestError, match="consumerConfig list"):
+            load_manifest(str(tmp_path))
+
     def test_round_trip_preserves_state(self, tmp_path: Path) -> None:
         save_manifest(
             str(tmp_path),
@@ -84,6 +96,7 @@ class TestLoadManifest:
                 files={"a.md": "d1"},
                 editable=("AGENTS.md",),
                 pending_merges=("AGENTS.md",),
+                consumer_config=(".hdsh/pairing.manifest.json",),
             ),
         )
         loaded = load_manifest(str(tmp_path))
@@ -92,3 +105,4 @@ class TestLoadManifest:
         assert loaded.files == {"a.md": "d1"}
         assert loaded.editable == ("AGENTS.md",)
         assert loaded.pending_merges == ("AGENTS.md",)
+        assert loaded.consumer_config == (".hdsh/pairing.manifest.json",)

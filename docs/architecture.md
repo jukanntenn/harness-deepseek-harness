@@ -14,7 +14,7 @@ hdsh ships governance gates for the Python ecosystem: GitHub Issue/PR policy, bi
 
 `hdsh.cli` owns the two-level argparse tree `hdsh <domain> <command>`: each domain package registers its own command-leaf parsers and keeps its semantic validation and messages, syntax errors surface as `ValueError` through `hdsh.cliargs`, handlers return integer exit codes, and the contract is uniform — 0 green, 1 violation, 2 usage. `scope` is the deliberate single-command exception: it registers its flags directly at the domain level because it has no subcommands.
 
-Gate configuration mirrors the domains: pairing reads `.hdsh/pairing.manifest.json` (`excluded` array plus the optional `generated` array of English sources exempt from the English-side switcher), the documentation gates read `.hdsh/docs.manifest.json`, and both parsers fail loud on unsupported fields at load.
+Gate configuration splits by ownership: corpus definitions are gate constants; per-repository values live in consumer-owned files. Pairing reads `.hdsh/pairing.manifest.json` (`excluded`, `generated`, `governed`, `roots`); the docs gates read `.hdsh/docs.manifest.json` for extensions and ceilings; both parsers fail loud.
 
 ## Core packages
 
@@ -38,7 +38,7 @@ The pairing domain is the largest because it owns a durable contract, not just c
 
 ## Documentation and RFC gates
 
-The docs domain keeps the Markdown corpus mechanically tidy: one physical line per prose paragraph, relative links and `#fragment` anchors that resolve, and standing documents under `wc -w` ceilings — each configured through the docs manifest, with relocate-or-condense as the response to a red budget. The rfc domain owns the decision-record format: lifecycle folders, class folders, header block, and the body skeleton for each lifecycle, plus the sealed archive that frozen history lives in. Scope rules and manifests are owned by [docs/AGENTS.md](AGENTS.md), the pairing contract by [docs/i18n/README.md](i18n/README.md), and the RFC mechanism by [`.agents/rfcs/README.md`](../.agents/rfcs/README.md).
+The docs domain keeps the Markdown corpus mechanically tidy: one physical line per prose paragraph, relative links and `#fragment` anchors that resolve, and standing documents under `wc -w` ceilings — corpus scope built in and extended through the docs manifest, with relocate-or-condense as the response to a red budget. The rfc domain owns the decision-record format: lifecycle folders, class folders, header block, and the body skeleton for each lifecycle, plus the sealed archive that frozen history lives in. Scope rules and manifests are owned by [docs/AGENTS.md](AGENTS.md), the pairing contract by [docs/i18n/README.md](i18n/README.md), and the RFC mechanism by [`.agents/rfcs/README.md`](../.agents/rfcs/README.md).
 
 ## Policy
 

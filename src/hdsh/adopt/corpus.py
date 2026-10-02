@@ -127,6 +127,18 @@ EDITABLE_DESTINATIONS: frozenset[str] = frozenset(
     }
 )
 
+#: Consumer-owned configuration destinations: created once at adoption and
+#: never digest-pinned, clobber-checked, or rewritten afterwards — the
+#: consumer edits them freely, and verify checks their structure instead of
+#: their bytes.
+CONSUMER_CONFIG_DESTINATIONS: frozenset[str] = frozenset(
+    {
+        ".hdsh/pairing.manifest.json",
+        ".hdsh/docs.manifest.json",
+        ".github/issue-management/config.json",
+    }
+)
+
 _USER_CREDENTIAL_INPUTS = "          project-token: ${{ secrets.HDSH_ISSUE_PROJECT_TOKEN }}"
 _ORGANIZATION_CREDENTIAL_INPUTS = (
     "          app-client-id: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}\n"
