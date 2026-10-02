@@ -20,6 +20,12 @@ class TestScope:
         assert not is_scope_file(".local/contexts/prek/README.md")
         assert not is_scope_file("src/hdsh/__init__.py")
 
+    def test_hidden_directories_are_not_prose_sources(self) -> None:
+        assert not is_scope_file(".zcode/README.md")
+        assert not is_scope_file(".claude/tools/README.zh.md")
+        assert not is_scope_file(".codex/README.i18n.yaml")
+        assert is_scope_file(".agents/rfcs/implemented/process/2026-01-01-a.md")
+
     def test_english_only_corpus_constants_are_out_of_scope(self) -> None:
         assert not is_scope_file("docs/AGENTS.md")
         assert not is_scope_file(".agents/rfcs/AGENTS.md")

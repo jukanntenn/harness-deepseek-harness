@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/proposed/feature/2026-10-01-guided-placeholder-completion.md
-2026-10-01-guided-placeholder-completion.md: a3920591160ff37f808f70927566daeffc5aa927
-2026-10-01-guided-placeholder-completion.zh.md: d0d530cc4fdff43c8c76b4ebb28708bc73c4479c
+2026-10-01-guided-placeholder-completion.md: ead19426cb7803463ac13857a09de3e1e062aec8
+2026-10-01-guided-placeholder-completion.zh.md: b457d5e32d30f95caeefb569d0885d3ea7a1145d

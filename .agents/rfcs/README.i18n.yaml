@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/README.md
-README.md: 084309b65c9e3cb4f0e213310f8bae755823ae50
-README.zh.md: 3611e865f246219a5a86e38a934a9c442e57ed3c
+README.md: 9a96a07e4df1e5870c31fcdf2878e68800e983c1
+README.zh.md: 8bd6c8a48eba1c0f399216a6c70f27fe82d5c81d

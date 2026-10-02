@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/process/2026-09-07-briefed-minimal-translation-updates.md
-2026-09-07-briefed-minimal-translation-updates.md: c7ea2be29596f97b266b91bb6ae9cb072af9d4a9
-2026-09-07-briefed-minimal-translation-updates.zh.md: 1b90934a59d9f6db376bc7f13edd874b9007506f
+2026-09-07-briefed-minimal-translation-updates.md: 65c0f21f4f8fa135d66d402591b85dbc8ad9d1f4
+2026-09-07-briefed-minimal-translation-updates.zh.md: 90a4502b9c09ab898145c2d1d61cbfb6f6f6e5ef

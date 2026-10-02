@@ -71,7 +71,6 @@ MIRRORED_FILES: tuple[tuple[str, str], ...] = (
         ".agents/skills/trimming-cot-leakage/references/recall-batteries.md",
         ".agents/skills/trimming-cot-leakage/references/recall-batteries.md",
     ),
-    ("docs/AGENTS.md", "docs/AGENTS.md"),
     ("docs/i18n/terminology.md", "docs/i18n/terminology.md"),
     ("docs/i18n/style-samples.md", "docs/i18n/style-samples.md"),
     (".github/ISSUE_TEMPLATE/config.yml", ".github/ISSUE_TEMPLATE/config.yml"),
@@ -89,12 +88,35 @@ MIRRORED_FILES: tuple[tuple[str, str], ...] = (
 #: the rewritten bytes, not this repository's.
 MIRRORED_PAIRS: tuple[str, ...] = (
     ".agents/rfcs/README.md",
+    ".agents/rfcs/implemented/feature/2026-09-08-user-account-issue-policy.md",
+    ".agents/rfcs/implemented/process/2026-09-07-bilingual-pairing-gate.md",
+    ".agents/rfcs/implemented/process/2026-09-07-briefed-minimal-translation-updates.md",
+    ".agents/rfcs/implemented/process/2026-09-07-document-corpus-gates.md",
+    ".agents/rfcs/implemented/process/2026-09-07-github-workflow.md",
+    ".agents/rfcs/implemented/process/2026-09-07-local-git-workflow.md",
     "docs/i18n/README.md",
     "docs/i18n/translation-rules.md",
     "docs/cookbook/responding-to-pr-review-on-a-stack.md",
 )
 
-#: In-package templates rendered with the adoption parameters.
+#: The decision-record closure the corpus cites: every RFC reachable from the
+#: mirrored corpus moves with it as a complete triplet, so rationale links
+#: resolve inside the consumer repository instead of pointing upstream.
+RFC_CLOSURE: frozenset[str] = frozenset(
+    {
+        ".agents/rfcs/implemented/feature/2026-09-08-user-account-issue-policy.md",
+        ".agents/rfcs/implemented/process/2026-09-07-bilingual-pairing-gate.md",
+        ".agents/rfcs/implemented/process/2026-09-07-briefed-minimal-translation-updates.md",
+        ".agents/rfcs/implemented/process/2026-09-07-document-corpus-gates.md",
+        ".agents/rfcs/implemented/process/2026-09-07-github-workflow.md",
+        ".agents/rfcs/implemented/process/2026-09-07-local-git-workflow.md",
+    }
+)
+
+#: In-package templates rendered with the adoption parameters. The
+#: documentation standard is a template with hdsh's repository-specific
+#: inventory removed: every adopter owns a documentation tree, none of them
+#: owns hdsh's community files or adoption manual.
 TEMPLATE_FILES: tuple[tuple[str, str], ...] = (
     ("github/workflows/issue-policy.yml", ".github/workflows/issue-policy.yml"),
     ("github/workflows/issue-lifecycle.yml", ".github/workflows/issue-lifecycle.yml"),
@@ -102,6 +124,7 @@ TEMPLATE_FILES: tuple[tuple[str, str], ...] = (
     ("docs/architecture.zh.md", "docs/architecture.zh.md"),
     ("docs/development.md", "docs/development.md"),
     ("docs/development.zh.md", "docs/development.zh.md"),
+    ("docs/AGENTS.md", "docs/AGENTS.md"),
     ("root/AGENTS.md", "AGENTS.md"),
     ("hdsh/docs.manifest.json", ".hdsh/docs.manifest.json"),
     ("hdsh/pairing.manifest.json", ".hdsh/pairing.manifest.json"),
@@ -245,6 +268,47 @@ def render_tokens(text: str, parameters: AdoptParameters, date: str) -> str:
     ):
         text = text.replace(token, value)
     return text
+
+
+#: The invocation forms: hdsh's own pages run the project environment, while
+#: consumers host-install hdsh and run the bare command, so transplanted
+#: markdown maps one into the other — fences included, because commands exist
+#: to be copied and run.
+SOURCE_INVOCATION = "uv run hdsh "
+CONSUMER_INVOCATION = "hdsh "
+
+
+def map_invocations(text: str) -> str:
+    """Map the source invocation form to the consumer invocation form.
+
+    Args:
+        text: Marked-down source text using the source form.
+
+    Returns:
+        The text with every source-form invocation mapped.
+    """
+    return text.replace(SOURCE_INVOCATION, CONSUMER_INVOCATION)
+
+
+def transplant_markdown(text: str, *, dest: str, installed: frozenset[str], hdsh_ref: str) -> str:
+    """The complete mirrored-markdown transplant transform.
+
+    Link rewriting is the identity over a self-contained corpus — the
+    self-containment gate proves it — so in practice this maps invocations
+    and leaves every link exactly as authored.
+
+    Args:
+        text: Markdown content about to be installed at ``dest``.
+        dest: Consumer destination path of the content.
+        installed: Every path adoption installs.
+        hdsh_ref: Pinned ref used for upstream URLs.
+
+    Returns:
+        The transplanted text.
+    """
+    return map_invocations(
+        rewrite_upstream_links(text, dest=dest, installed=installed, hdsh_ref=hdsh_ref)
+    )
 
 
 def rewrite_upstream_links(

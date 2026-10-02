@@ -22,7 +22,7 @@ The active lifecycle tree is the working inventory: browse its lifecycle/class f
 
 ## Classification
 
-Each RFC belongs to one path-encoded class from the closed set in the format gate, [`src/hdsh/rfc/format.py`](../../src/hdsh/rfc/format.py); the gate rejects other folders. Adding a class requires updating the canonical set and this section.
+Each RFC belongs to one path-encoded class from the closed set the format gate enforces; the gate rejects other folders. Adding a class requires updating the canonical set and this section.
 
 | Class | What it covers |
 |---|---|
@@ -43,7 +43,7 @@ Supersession is checked while a new RFC is written, using the calibrated [`archi
 
 The archive is path-encoded as `archived/{class}/yyyy-mm-dd-topic-title.md`; `implemented` is deliberately absent because only implemented RFCs can enter it. An archival change moves the complete English/Chinese/sidecar triplet, retains `Status: implemented`, inserts the same `Archived: YYYY-MM-DD` line immediately below that status in both language files, re-records the sidecar, and repairs or deletes inbound links. These are the only permitted content changes during archival.
 
-Once sealed, every archived triplet is permanently frozen. Do not edit, translate, reformat, update, move, or delete it, and do not treat it as authority for current behavior. The pairing gate and the format gate exclude the archived tree from their corpora, and active prose may still link into an archived RFC when it intentionally cites history. `uv run hdsh rfc archive` ([`src/hdsh/rfc/archive.py`](../../src/hdsh/rfc/archive.py)) enforces the closed class tree, complete triplets, sealed headers, sidecar hashes, and the append-only frozen-content manifest; `uv run hdsh rfc seal` appends new artifact hashes after proving every existing seal unchanged. The manifest, not git history, is the seal source — history rewriting and shallow checkouts make commit ancestry unreliable as a local seal source — and sealing is a separate command, following the pairing domain's `verify`/`record` precedent that mutation is always an explicit command.
+Once sealed, every archived triplet is permanently frozen. Do not edit, translate, reformat, update, move, or delete it, and do not treat it as authority for current behavior. The pairing gate and the format gate exclude the archived tree from their corpora, and active prose may still link into an archived RFC when it intentionally cites history. `uv run hdsh rfc archive` enforces the closed class tree, complete triplets, sealed headers, sidecar hashes, and the append-only frozen-content manifest; `uv run hdsh rfc seal` appends new artifact hashes after proving every existing seal unchanged. The manifest, not git history, is the seal source — history rewriting and shallow checkouts make commit ancestry unreliable as a local seal source — and sealing is a separate command, following the pairing domain's `verify`/`record` precedent that mutation is always an explicit command.
 
 ## When to write one
 
@@ -59,7 +59,7 @@ A feature-addition RFC may be consolidated into the later removal RFC only when 
 
 ## The file format
 
-Every active RFC follows one in-file format, enforced by `uv run hdsh rfc verify` (the format gate in [`src/hdsh/rfc/format.py`](../../src/hdsh/rfc/format.py), also a pre-commit hook). Archived RFCs retain the format they had when sealed plus the archive-date line above.
+Every active RFC follows one in-file format, enforced by `uv run hdsh rfc verify` (also a pre-commit hook). Archived RFCs retain the format they had when sealed plus the archive-date line above.
 
 ### The header block
 

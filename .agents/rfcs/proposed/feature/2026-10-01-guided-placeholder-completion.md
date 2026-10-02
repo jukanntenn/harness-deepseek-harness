@@ -10,7 +10,7 @@ The transplanted skills assert hdsh's concrete toolchain facts as if they were t
 
 ## Proposal
 
-This is the per-repo-value row of [the transplantable-corpus taxonomy](../architecture/2026-10-01-transplantable-corpus.md) realized for the skills.
+This is the per-repo-value row of [the transplantable-corpus taxonomy](../../implemented/architecture/2026-10-01-transplantable-corpus.md) realized for the skills.
 
 - **Command-bearing skills become templates.** Each per-repo command fact becomes a guided `TODO(adopt):` placeholder whose text tells the filling agent what to state and shows hdsh's value as the worked example — the same marker the templated standing documents already use.
 - **The placeholder check becomes an always-run prek hook.** adopt verify's existing placeholder check is wired where prek enforces it, so a commit that would carry an unfilled slot is blocked with the fill instruction in the diagnostic — the forcing function that already drives standing-document completion, moved onto the commit path.

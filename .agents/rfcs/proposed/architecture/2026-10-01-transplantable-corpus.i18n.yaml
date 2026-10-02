@@ -1,7 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
-# hash of each side as of the last confirmed-consistent state. Both
-# languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   hdsh pairing record .agents/rfcs/proposed/architecture/2026-10-01-transplantable-corpus.md
-2026-10-01-transplantable-corpus.md: b3cf6156fb716b4bd687e7e54770015f8f73a046
-2026-10-01-transplantable-corpus.zh.md: 56a56fd93ee042deff636f94fd3770255aeff716

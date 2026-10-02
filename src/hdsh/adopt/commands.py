@@ -46,6 +46,7 @@ TOOL = "hdsh adopt"
 
 ACCOUNT_TYPES = ("user", "organization")
 SHARED_DESTINATIONS = frozenset({".gitattributes", "prek.toml"})
+STANDING_ORDERS_DESTINATIONS = frozenset({"AGENTS.md", "docs/AGENTS.md"})
 PLACEHOLDER_MARKER = "TODO(adopt):"
 _PENDING_LINK = re.compile(r"\]\(([^)\s]+)\)")
 _PENDING_FENCE = re.compile(r"^\s*(?:```|~~~)")
@@ -381,14 +382,14 @@ def _resolve_parameters(
 
 
 def _pair_writes(anchor: str, installed: frozenset[str], hdsh_ref: str) -> list[PlannedWrite]:
-    """Load and rewrite one mirrored bilingual pair by its English anchor."""
+    """Load and transplant one mirrored bilingual pair by its English anchor."""
     writes: list[PlannedWrite] = []
     for source in (anchor, f"{anchor[: -len('.md')]}.zh.md"):
         text = (_MIRRORS_ROOT / source).read_text(encoding="utf-8")
-        rewritten = corpus.rewrite_upstream_links(
+        transplanted = corpus.transplant_markdown(
             text, dest=source, installed=installed, hdsh_ref=hdsh_ref
         )
-        writes.append(PlannedWrite(dest=source, content=rewritten.encode("utf-8")))
+        writes.append(PlannedWrite(dest=source, content=transplanted.encode("utf-8")))
     return writes
 
 
@@ -432,7 +433,7 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
     for source, dest in corpus.MIRRORED_FILES:
         content = (_MIRRORS_ROOT / source).read_bytes()
         if source.endswith((".md", ".zh.md")):
-            content = corpus.rewrite_upstream_links(
+            content = corpus.transplant_markdown(
                 content.decode("utf-8"),
                 dest=dest,
                 installed=installed,
@@ -632,12 +633,12 @@ def _plan_clobbers(
                 "verify checks its structure instead of its bytes"
             )
             continue
-        if write.dest == "AGENTS.md":
+        if write.dest in STANDING_ORDERS_DESTINATIONS:
             pending_merges.append(write.dest)
             skipped.append(
-                "AGENTS.md: an existing root AGENTS.md was left untouched; merge the harness "
-                "pointers (skills paths, command inventory) into it manually — adopt verify "
-                "names the required harness anchors until the merge lands"
+                f"{write.dest}: an existing standing-orders file was left untouched; merge the "
+                "harness pointers (skills paths, command inventory) into it manually — adopt "
+                "verify names the required harness anchors until the merge lands"
             )
             continue
         if write.dest in corpus.EDITABLE_DESTINATIONS:

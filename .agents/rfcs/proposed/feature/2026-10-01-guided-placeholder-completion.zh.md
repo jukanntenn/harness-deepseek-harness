@@ -10,7 +10,7 @@ Status: proposed
 
 ## 提案
 
-本 RFC 是[可迁移语料四分法](../architecture/2026-10-01-transplantable-corpus.zh.md)中"每个仓库各有一个值"一行在技能上的落地。
+本 RFC 是[可迁移语料四分法](../../implemented/architecture/2026-10-01-transplantable-corpus.zh.md)中"每个仓库各有一个值"一行在技能上的落地。
 
 - **带命令的技能转为模板。** 每个每仓库命令事实变成一个引导式 `TODO(adopt):` 占位符，其文案告诉填写的 agent 要陈述什么，并以 hdsh 的值作为成例——与模板化 standing docs 已在使用的标记相同。
 - **占位符检查变成 always-run prek 钩子。** adopt verify 现有的占位符检查接到 prek 的执行点上，于是携带未填槽位的提交会被挡下，诊断里就是填写说明——与推动 standing docs 补全的是同一个 forcing function，移到了提交路径上。
