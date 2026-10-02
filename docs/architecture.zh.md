@@ -14,7 +14,7 @@ hdsh 把治理门禁打包给 Python 生态：GitHub Issue/PR 策略、双语文
 
 `hdsh.cli` 拥有两级 argparse 树 `hdsh <domain> <command>`：每个域包注册自己的命令叶解析器并保留其语义校验与消息，语法错误以 `ValueError` 经 `hdsh.cliargs` 浮出，处理器返回整数退出码，且契约统一——0 绿、1 违规、2 用法。`scope` 是刻意的单命令例外：它没有子命令，直接在域层注册自己的 flag。
 
-门禁配置镜像域划分：pairing 读 `.hdsh/pairing.manifest.json`（`excluded` 数组加可选的 `generated` 数组——后者列出免于英侧切换行的生成英文源），文档门禁读 `.hdsh/docs.manifest.json`，两个解析器在加载期对不支持的字段报错退出。
+门禁配置按所有权切分：语料定义是门禁常量，每仓库值住消费者自有、不被 digest 钉死的文件。pairing 读 `.hdsh/pairing.manifest.json`（`excluded`、`generated`，另有自管双语的 `governed` 与子树扩展的 `roots`）；文档门禁语料内建，读 `.hdsh/docs.manifest.json` 取扩展与上限；解析器加载期对未知字段报错。
 
 ## 核心包
 
@@ -38,7 +38,7 @@ pairing 域最大，因为它拥有的是一个持久契约而不仅是检查：
 
 ## 文档与 RFC 门禁
 
-docs 域保持 Markdown 语料的机械整洁：每个散文段落一个物理行、可解析的相对链接与 `#fragment` 锚点、以及 `wc -w` 上限之内的常驻文档——全部经 docs manifest 配置，预算变红的应对是搬迁或压缩。rfc 域拥有决策记录格式：生命周期目录、类别目录、头部块与各生命周期的正文骨架，加上承载冻结历史的封存档案。范围规则与 manifest 归 [docs/AGENTS.md](AGENTS.md) 所有，配对契约归 [docs/i18n/README.md](i18n/README.zh.md)，RFC 机制归 [.agents/rfcs/README.md](../.agents/rfcs/README.zh.md)。
+docs 域保持 Markdown 语料的机械整洁：每个散文段落一个物理行、可解析的相对链接与 `#fragment` 锚点、以及 `wc -w` 上限之内的常驻文档——语料范围内建、经 docs manifest 扩展，预算变红的应对是搬迁或压缩。rfc 域拥有决策记录格式：生命周期目录、类别目录、头部块与各生命周期的正文骨架，加上承载冻结历史的封存档案。范围规则与 manifest 归 [docs/AGENTS.md](AGENTS.md) 所有，配对契约归 [docs/i18n/README.md](i18n/README.zh.md)，RFC 机制归 [.agents/rfcs/README.md](../.agents/rfcs/README.zh.md)。
 
 ## Policy
 

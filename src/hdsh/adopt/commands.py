@@ -33,8 +33,11 @@ from hdsh.adopt.manifest import (
     load_manifest,
     save_manifest,
 )
+from hdsh.docs.config import parse_docs_manifest
 from hdsh.docs.markdown import document_anchors
 from hdsh.pairing import verify as pairing_verify
+from hdsh.pairing.manifest import parse_manifest as parse_pairing_manifest
+from hdsh.policy.config import PolicyConfig
 
 if TYPE_CHECKING:
     from hdsh import cliargs
@@ -215,10 +218,42 @@ def _gitattributes_content(existing: str | None) -> str:
     return f"{existing}{separator}{corpus.GITATTRIBUTES_DRIVER_LINE}\n"
 
 
+def _existing_issue_config(root: str, blockers: list[Blocker]) -> PolicyConfig | None:
+    """Load a hand-authored or previously adopted ``config.json``.
+
+    Args:
+        root: Consumer repository root.
+        blockers: Collected blockers; a malformed file appends here.
+
+    Returns:
+        The validated configuration, or ``None`` when absent or malformed
+        (the appended blocker aborts the run before any write).
+    """
+    path = Path(root, ".github/issue-management/config.json")
+    if not path.exists():
+        return None
+    try:
+        return PolicyConfig.from_json(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        blockers.append(
+            Blocker(
+                ".github/issue-management/config.json",
+                f"the existing file is malformed ({error}).",
+                "Repair the file or remove it so adopt can render it, then rerun.",
+            )
+        )
+        return None
+
+
 def _resolve_parameters(
     root: str, arguments: argparse.Namespace, blockers: list[Blocker]
 ) -> AdoptParameters:
     """Validate the flag inputs and derive the resolved parameters.
+
+    An existing ``config.json`` is a binding input: its values become the
+    parameters, every required flag contradicting a file value is a blocker —
+    adopt never guesses precedence — and its standard-set statuses are
+    checked rather than overwritten.
 
     Args:
         root: Consumer repository root.
@@ -264,6 +299,69 @@ def _resolve_parameters(
                 f"{arguments.project_number} is not a positive project number.",
                 "Pass the GitHub Project number backing issue management.",
             )
+        )
+    existing = _existing_issue_config(root, blockers)
+    if existing is not None:
+        for flag, field, flag_value, file_value in (
+            ("--account-type", "accountType", arguments.account_type, existing.account_type),
+            (
+                "--project-number",
+                "projectNumber",
+                str(arguments.project_number),
+                str(existing.project_number),
+            ),
+            ("--project-title", "projectTitle", arguments.project_title, existing.project_title),
+            (
+                "--lifecycle-actor",
+                "lifecycleActor",
+                arguments.lifecycle_actor,
+                existing.lifecycle_actor,
+            ),
+            ("--time-zone", "projectTimeZone", arguments.time_zone, existing.project_time_zone),
+            (
+                "--priority-field",
+                "priorityField",
+                arguments.priority_field,
+                existing.priority_field,
+            ),
+            (
+                "--start-date-field",
+                "startDateField",
+                arguments.start_date_field,
+                existing.start_date_field,
+            ),
+        ):
+            if flag_value != file_value:
+                blockers.append(
+                    Blocker(
+                        flag,
+                        f"{flag_value!r} contradicts the existing config.json "
+                        f"{field} value {file_value!r}.",
+                        "Edit the file or drop the flag; adopt never guesses precedence.",
+                    )
+                )
+        if tuple(existing.statuses) != corpus.STANDARD_STATUSES:
+            blockers.append(
+                Blocker(
+                    ".github/issue-management/config.json",
+                    "statuses differ from the standard set the harness governs.",
+                    "Align the file with the seven standard statuses, then rerun.",
+                )
+            )
+        return AdoptParameters(
+            hdsh_ref=arguments.hdsh_ref,
+            owner=owner,
+            repository=repository,
+            account_type=existing.account_type,
+            project_number=existing.project_number,
+            project_title=existing.project_title,
+            lifecycle_actor=existing.lifecycle_actor,
+            time_zone=existing.project_time_zone,
+            priority_field=existing.priority_field,
+            start_date_field=existing.start_date_field,
+            allow_unassigned_owner=existing.allow_unassigned_owner,
+            public_blob_root=arguments.public_blob_root
+            or f"https://github.com/{owner}/{repository}/blob/main/",
         )
     return AdoptParameters(
         hdsh_ref=arguments.hdsh_ref,
@@ -528,6 +626,12 @@ def _plan_clobbers(
         if not path.exists():
             kept.append(write)
             continue
+        if write.dest in corpus.CONSUMER_CONFIG_DESTINATIONS:
+            skipped.append(
+                f"{write.dest}: existing consumer-owned configuration left untouched; "
+                "verify checks its structure instead of its bytes"
+            )
+            continue
         if write.dest == "AGENTS.md":
             pending_merges.append(write.dest)
             skipped.append(
@@ -716,6 +820,7 @@ def apply_main(args: argparse.Namespace) -> int:
                 for write in plan.writes
                 if write.dest not in SHARED_DESTINATIONS
                 and write.dest not in corpus.EDITABLE_DESTINATIONS
+                and write.dest not in corpus.CONSUMER_CONFIG_DESTINATIONS
             },
             editable=tuple(
                 sorted(
@@ -725,6 +830,7 @@ def apply_main(args: argparse.Namespace) -> int:
                 )
             ),
             pending_merges=plan.pending_merges,
+            consumer_config=tuple(sorted(corpus.CONSUMER_CONFIG_DESTINATIONS)),
         ),
     )
     for line in (*plan.skipped, *plan.notes):
@@ -770,6 +876,55 @@ def _required_anchors(root: str, destination: str, sources: tuple[str, ...]) -> 
     return tuple(sorted(required))
 
 
+def _consumer_config_drift(root: str, manifest: AdoptManifest) -> list[str]:
+    """Structurally validate every consumer-owned configuration file.
+
+    Byte pinning would defeat the point — the consumer edits these files — so
+    verify checks that each loads, that the issue-management configuration
+    still names this repository and the standard status set, and lets the
+    owning parsers reject everything else at load.
+
+    Args:
+        root: Consumer repository root.
+        manifest: The recorded adoption state.
+
+    Returns:
+        Drift entries for missing or structurally invalid files.
+    """
+    problems: list[str] = []
+    for dest in sorted(manifest.consumer_config):
+        path = Path(root, dest)
+        if not path.exists():
+            problems.append(f"{dest}: missing")
+            continue
+        text = path.read_text(encoding="utf-8")
+        if dest == ".github/issue-management/config.json":
+            try:
+                config = PolicyConfig.from_json(text)
+            except ValueError as error:
+                problems.append(f"{dest}: invalid ({error})")
+                continue
+            slug = _resolve_slug(root)
+            if slug is not None and (config.owner, config.repository) != slug:
+                problems.append(
+                    f"{dest}: owner/repository {config.owner}/{config.repository} "
+                    f"does not match the origin remote {slug[0]}/{slug[1]}"
+                )
+            if tuple(config.statuses) != corpus.STANDARD_STATUSES:
+                problems.append(f"{dest}: statuses differ from the standard set")
+        elif dest == ".hdsh/pairing.manifest.json":
+            try:
+                parse_pairing_manifest(text)
+            except (TypeError, ValueError) as error:
+                problems.append(f"{dest}: invalid ({error})")
+        else:
+            try:
+                parse_docs_manifest(text)
+            except (TypeError, ValueError) as error:
+                problems.append(f"{dest}: invalid ({error})")
+    return problems
+
+
 def verify_main(_args: argparse.Namespace) -> int:
     """``hdsh adopt verify`` entry point."""
     try:
@@ -782,7 +937,7 @@ def verify_main(_args: argparse.Namespace) -> int:
     except ManifestError as error:
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
-    drift: list[str] = []
+    drift: list[str] = _consumer_config_drift(root, manifest)
     placeholders: list[str] = []
     pending: list[str] = []
     for dest, digest in sorted(manifest.files.items()):

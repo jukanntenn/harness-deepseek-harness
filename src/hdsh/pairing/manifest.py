@@ -31,6 +31,11 @@ class PairingManifest:
 
     excluded: tuple[str, ...]
     generated: tuple[str, ...]
+    #: Consumer-governed corpus files: bilingual content the repository
+    #: maintains under its own discipline; the gate looks away entirely.
+    governed: tuple[str, ...]
+    #: Corpus subtree roots extending the standard scope; each ends with ``/``.
+    roots: tuple[str, ...]
     #: Absolute-URL prefix accepted before switcher counterparts; ``""`` none.
     public_blob_root: str
 
@@ -53,8 +58,9 @@ def parse_manifest(content: str) -> PairingManifest:
     Raises:
         ValueError: When the manifest is not an object holding exactly an
             ``excluded`` array of strings, an optional ``generated`` array of
-            strings, and an optional ``public_blob_root`` http(s) URL prefix
-            ending in ``/``.
+            strings, an optional ``governed`` array of strings, an optional
+            ``roots`` array of trailing-slash subtree prefixes, and an
+            optional ``public_blob_root`` http(s) URL prefix ending in ``/``.
         TypeError: When the manifest is not an object.
     """
     try:
@@ -65,20 +71,32 @@ def parse_manifest(content: str) -> PairingManifest:
     if not isinstance(value, dict):
         msg = f"{MANIFEST_PATH}: expected an object"
         raise TypeError(msg)
-    unsupported = [key for key in value if key not in ("excluded", "generated", "public_blob_root")]
+    supported = ("excluded", "generated", "governed", "roots", "public_blob_root")
+    unsupported = [key for key in value if key not in supported]
     if unsupported:
         msg = (
             f"{MANIFEST_PATH}: unsupported field(s): {', '.join(unsupported)}; "
             "every in-scope document is required"
         )
         raise ValueError(msg)
-    entries = value.get("excluded")
+    entries = value.get("excluded", [])
     if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
         msg = f"{MANIFEST_PATH}: excluded must be an array of strings"
         raise ValueError(msg)
     generated = value.get("generated", [])
     if not isinstance(generated, list) or not all(isinstance(entry, str) for entry in generated):
         msg = f"{MANIFEST_PATH}: generated must be an array of strings"
+        raise ValueError(msg)
+    governed = value.get("governed", [])
+    if not isinstance(governed, list) or not all(isinstance(entry, str) for entry in governed):
+        msg = f"{MANIFEST_PATH}: governed must be an array of strings"
+        raise ValueError(msg)
+    roots = value.get("roots", [])
+    if not isinstance(roots, list) or not all(
+        isinstance(entry, str) and entry.endswith("/") and not entry.startswith("/")
+        for entry in roots
+    ):
+        msg = f"{MANIFEST_PATH}: roots must be an array of trailing-slash subtree prefixes"
         raise ValueError(msg)
     root = value.get("public_blob_root", "")
     if not isinstance(root, str):
@@ -88,7 +106,11 @@ def parse_manifest(content: str) -> PairingManifest:
         msg = f"{MANIFEST_PATH}: public_blob_root must be an http(s) URL prefix ending in /"
         raise ValueError(msg)
     return PairingManifest(
-        excluded=tuple(entries), generated=tuple(generated), public_blob_root=root
+        excluded=tuple(entries),
+        generated=tuple(generated),
+        governed=tuple(governed),
+        roots=tuple(roots),
+        public_blob_root=root,
     )
 
 
@@ -100,7 +122,7 @@ def manifest_excluded(file: str, manifest: PairingManifest) -> bool:
 
     Args:
         file: Repository-relative path.
-        manifest: The parsed pairing manifest.
+        manifest: The parsed manifest.
 
     Returns:
         True when the file is excluded from pairing.
@@ -109,3 +131,36 @@ def manifest_excluded(file: str, manifest: PairingManifest) -> bool:
         file.startswith(entry) if entry.endswith("/") else file == entry
         for entry in manifest.excluded
     )
+
+
+def manifest_governed(file: str, manifest: PairingManifest) -> bool:
+    """Whether a manifest entry marks one file or subtree consumer-governed.
+
+    Governed content may keep its translation — the repository maintains it
+    under its own discipline — but it leaves the corpus entirely: no
+    completeness, consistency, or switcher checks run for it.
+
+    Args:
+        file: Repository-relative path.
+        manifest: The parsed manifest.
+
+    Returns:
+        True when the file is governed elsewhere.
+    """
+    return any(
+        file.startswith(entry) if entry.endswith("/") else file == entry
+        for entry in manifest.governed
+    )
+
+
+def manifest_rooted(file: str, manifest: PairingManifest) -> bool:
+    """Whether one corpus root subtree contains the file.
+
+    Args:
+        file: Repository-relative path.
+        manifest: The parsed manifest.
+
+    Returns:
+        True when a ``roots`` entry prefixes the file.
+    """
+    return any(file.startswith(entry) for entry in manifest.roots)

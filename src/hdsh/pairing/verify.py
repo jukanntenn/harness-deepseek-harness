@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from hdsh.pairing import links as pairing_links
-from hdsh.pairing.corpus import is_scope_file
+from hdsh.pairing.corpus import corpus_file_predicate
 from hdsh.pairing.git import blob_hash, git_index_paths, read_git_index_blob, store_git_blob
 from hdsh.pairing.manifest import MANIFEST_PATH, manifest_excluded, parse_manifest
 from hdsh.pairing.records import (
@@ -248,8 +248,12 @@ class PairingRepository:
             return file in self._index_files
         return self.read_repository_file(file) is not None
 
-    def discover_scope_files(self) -> set[str]:
+    def discover_scope_files(self, is_corpus_file: Callable[[str], bool]) -> set[str]:
         """Enumerate every in-scope Markdown and pairing sidecar in the tree.
+
+        Args:
+            is_corpus_file: The active corpus membership predicate, carrying
+                the manifest's ``roots`` extensions and exclusions.
 
         Returns:
             Repository-relative paths that pass the corpus predicate.
@@ -263,7 +267,7 @@ class PairingRepository:
                     continue
                 if relative.startswith(_EXCLUDED_ROOT_PREFIXES):
                     continue
-                if is_scope_file(relative):
+                if is_corpus_file(relative):
                     files.add(relative)
         return files
 
@@ -316,8 +320,8 @@ def run_gate(
     def excluded(file: str) -> bool:
         return manifest_excluded(file, manifest)
 
-    def is_pair_source(path: str) -> bool:
-        return is_scope_file(path) and not excluded(path)
+    is_corpus_file = corpus_file_predicate(manifest)
+    is_pair_source = is_corpus_file
 
     files: set[str] = set()
     if request.scope == "pairs":
@@ -329,14 +333,14 @@ def run_gate(
             if not repository.index_mode and not repository.repository_file_exists(anchor):
                 files.add(anchor)
     else:
-        files = repository.discover_scope_files()
+        files = repository.discover_scope_files(is_corpus_file)
 
     translations = sorted(f for f in files if f.endswith(".zh.md"))
     metas = sorted(f for f in files if f.endswith(".i18n.yaml"))
     sources = sorted(f for f in files if f.endswith(".md") and not f.endswith(".zh.md"))
 
     if request.scope == "pairs":
-        rejected = [a for a in request.anchors if not is_scope_file(a) or excluded(a)]
+        rejected = [a for a in request.anchors if not is_corpus_file(a)]
         absent = [
             a
             for a in request.anchors
@@ -360,16 +364,12 @@ def run_gate(
             return 2
 
     if request.mode == "write":
-        return _write_records(
-            repository, request, sources, excluded=excluded, stdout=stdout, stderr=stderr
-        )
+        return _write_records(repository, request, sources, stdout=stdout, stderr=stderr)
 
     errors: list[str] = []
     state: dict[str, str] = {}
 
     for source in sources:
-        if excluded(source):
-            continue
         if not repository.repository_file_exists(pair_paths(source).zh):
             errors.append(
                 f"{source}: in-scope documentation must merge bilingual "
@@ -439,7 +439,6 @@ def _write_records(
     request: PairingRequest,
     sources: list[str],
     *,
-    excluded: Callable[[str], bool],
     stdout: LineSink,
     stderr: LineSink,
 ) -> int:
@@ -448,8 +447,8 @@ def _write_records(
     Args:
         repository: Bound content plane (writes always use the working tree).
         request: The parsed CLI request carrying ``scope``.
-        sources: Discovered English sources.
-        excluded: Manifest exclusion predicate.
+        sources: Discovered English sources — corpus members only, because
+            the combined predicate excludes manifest-excluded files.
         stdout: Status-line sink.
         stderr: Error-line sink.
 
@@ -459,8 +458,6 @@ def _write_records(
     scope = request.scope
     written = 0
     for source in sources:
-        if excluded(source):
-            continue
         paths = pair_paths(source)
         source_exists = repository.repository_file_exists(paths.source)
         zh_exists = repository.repository_file_exists(paths.zh)

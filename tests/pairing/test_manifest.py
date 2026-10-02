@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from hdsh.pairing.manifest import manifest_excluded, parse_manifest
+from hdsh.pairing.manifest import (
+    manifest_excluded,
+    manifest_governed,
+    manifest_rooted,
+    parse_manifest,
+)
 
 
 class TestManifest:
@@ -15,6 +20,41 @@ class TestManifest:
         assert manifest_excluded("docs/y/z.md", manifest)
         assert not manifest_excluded("docs/y2/z.md", manifest)
         assert not manifest_excluded("docs/other.md", manifest)
+
+    def test_parses_roots(self) -> None:
+        manifest = parse_manifest('{"excluded": [], "roots": ["specs/"]}')
+        assert manifest.roots == ("specs/",)
+        assert manifest_rooted("specs/guide.md", manifest)
+        assert not manifest_rooted("specifications/guide.md", manifest)
+
+    def test_roots_default_to_empty(self) -> None:
+        assert parse_manifest('{"excluded": []}').roots == ()
+
+    def test_rejects_roots_without_a_trailing_slash(self) -> None:
+        with pytest.raises(ValueError, match="roots must be an array of trailing-slash"):
+            parse_manifest('{"excluded": [], "roots": ["specs"]}')
+
+    def test_rejects_absolute_roots(self) -> None:
+        with pytest.raises(ValueError, match="roots must be an array of trailing-slash"):
+            parse_manifest('{"excluded": [], "roots": ["/specs/"]}')
+
+    def test_rejects_non_string_roots(self) -> None:
+        with pytest.raises(ValueError, match="roots must be an array of trailing-slash"):
+            parse_manifest('{"excluded": [], "roots": [7]}')
+
+    def test_parses_governed(self) -> None:
+        manifest = parse_manifest('{"excluded": [], "governed": ["specs/", "vendor/README.md"]}')
+        assert manifest_governed("specs/README.md", manifest)
+        assert manifest_governed("vendor/README.md", manifest)
+        assert not manifest_governed("docs/guide.md", manifest)
+        assert not manifest_governed("specs-notes/guide.md", manifest)
+
+    def test_governed_defaults_to_empty(self) -> None:
+        assert parse_manifest('{"excluded": []}').governed == ()
+
+    def test_rejects_non_array_governed(self) -> None:
+        with pytest.raises(ValueError, match="governed must be an array of strings"):
+            parse_manifest('{"excluded": [], "governed": "specs/"}')
 
     def test_rejects_unsupported_field(self) -> None:
         with pytest.raises(ValueError, match="unsupported field"):

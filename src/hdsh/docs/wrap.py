@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 
 from hdsh.docs.config import (
     DocsConfigError,
+    effective_scope,
     load_docs_manifest,
-    missing_section_error,
 )
 from hdsh.docs.corpus import discover_corpus_files, find_repository_root
 from hdsh.docs.markdown import hard_wrapped_paragraphs
@@ -41,9 +41,7 @@ def run(root: Path) -> int:
         The exit code: 0 green, 1 violations found.
     """
     manifest = load_docs_manifest(root)
-    if manifest.markdown_wrap is None:
-        raise missing_section_error("markdownWrap", TOOL)
-    files = discover_corpus_files(root, manifest.markdown_wrap)
+    files = discover_corpus_files(root, effective_scope(manifest.markdown_wrap))
     violations: list[str] = []
     for file in files:
         source = file.abs_path.read_text(encoding="utf-8")

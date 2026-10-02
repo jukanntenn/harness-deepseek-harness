@@ -41,15 +41,15 @@ The gate's limit, stated plainly: **a green gate means the pair was confirmed co
 
 ## Scope and exclusions
 
-**Scope**: every README anywhere in the tree, the root `ADOPT.md` consumer manual, every document under `docs/**`, and every document under `.agents/rfcs/**` (the RFC tree), minus the manifest exclusions below. Dependency, cache, build-output, and vendored trees, and the packaged adoption mirrors under `src/hdsh/adopt/templates/`, are discovery exclusions, not translation sources.
+**Scope**: every README anywhere in the tree, the root `ADOPT.md` consumer manual, every document under `docs/**`, and every document under `.agents/rfcs/**` (the RFC tree), plus the manifest's `roots` subtrees, minus its `excluded` and `governed` entries below. Dependency, cache, build-output, and vendored trees, and the packaged adoption mirrors under `src/hdsh/adopt/templates/`, are discovery exclusions, not translation sources.
 
-**Excluded** (never paired, and the gate rejects a `.zh.md` or `.i18n.yaml` for them):
+**Excluded** (never paired, and the gate rejects a `.zh.md` or `.i18n.yaml` for them). The agent-instruction and translation-memory entries below are corpus constants carried by the gate itself — no manifest entry lists them:
 
 - `docs/AGENTS.md`, `.agents/rfcs/AGENTS.md`, `.agents/rfcs/implemented/AGENTS.md`, and `.agents/rfcs/archived/AGENTS.md` — agent instructions, maintained in English only; the root `AGENTS.md` likewise sits outside the corpus.
 - [terminology.md](terminology.md) and [style-samples.md](style-samples.md) — the terminology table is a Chinese-side reference and the style samples are bilingual by construction; pairing cannot check either.
 - `.agents/rfcs/archived/` — the whole frozen archive tree: sealed historical records kept for citation, never edited, translated, or re-recorded.
 
-**Universal requirement**: every current or future document in scope must merge as a complete bilingual pair. [.hdsh/pairing.manifest.json](../../.hdsh/pairing.manifest.json) contains only an `excluded` array, an optional `generated` array naming generated English sources exempt from the English-side switcher, and an optional `public_blob_root` http(s) URL prefix accepting absolute-form switcher links — the parser rejects any other field — and there is no per-file rollout list, date cutoff, or README-specific policy class.
+**Universal requirement**: every current or future document in scope must merge as a complete bilingual pair. [.hdsh/pairing.manifest.json](../../.hdsh/pairing.manifest.json) contains only an optional `excluded` array, an optional `generated` array naming generated English sources exempt from the English-side switcher, an optional `governed` array naming bilingual content the repository maintains under its own discipline (translations may exist; the gate looks away), an optional `roots` array of trailing-slash subtree prefixes extending the corpus beyond its standard scope, and an optional `public_blob_root` http(s) URL prefix accepting absolute-form switcher links — the parser rejects any other field — and there is no per-file rollout list, date cutoff, or README-specific policy class.
 
 ## Division of labor
 

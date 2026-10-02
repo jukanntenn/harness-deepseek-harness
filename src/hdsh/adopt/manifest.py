@@ -35,6 +35,9 @@ class AdoptManifest:
     #: the harness anchors the installed corpus links into until the manual
     #: merge lands.
     pending_merges: tuple[str, ...] = ()
+    #: Consumer-owned configuration destinations; verify validates their
+    #: structure at load instead of pinning their bytes.
+    consumer_config: tuple[str, ...] = ()
 
 
 class ManifestError(ValueError):
@@ -79,6 +82,7 @@ def load_manifest(root: str) -> AdoptManifest:
     files = value.get("files")
     editable = value.get("editable", [])
     pending_merges = value.get("pendingMerges", [])
+    consumer_config = value.get("consumerConfig", [])
     if not isinstance(hdsh_version, str) or not isinstance(hdsh_ref, str):
         msg = f"{MANIFEST_PATH} requires string hdshVersion and hdshRef fields"
         raise ManifestError(msg)
@@ -95,12 +99,18 @@ def load_manifest(root: str) -> AdoptManifest:
     ):
         msg = f"{MANIFEST_PATH} requires a pendingMerges list of paths"
         raise ManifestError(msg)
+    if not isinstance(consumer_config, list) or not all(
+        isinstance(path, str) for path in consumer_config
+    ):
+        msg = f"{MANIFEST_PATH} requires a consumerConfig list of paths"
+        raise ManifestError(msg)
     return AdoptManifest(
         hdsh_version=hdsh_version,
         hdsh_ref=hdsh_ref,
         files=dict(files),
         editable=tuple(editable),
         pending_merges=tuple(pending_merges),
+        consumer_config=tuple(consumer_config),
     )
 
 
@@ -117,6 +127,7 @@ def save_manifest(root: str, manifest: AdoptManifest) -> None:
         "files": dict(sorted(manifest.files.items())),
         "editable": sorted(manifest.editable),
         "pendingMerges": sorted(manifest.pending_merges),
+        "consumerConfig": sorted(manifest.consumer_config),
     }
     path = Path(root, MANIFEST_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)

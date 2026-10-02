@@ -41,15 +41,15 @@
 
 ## 范围与排除
 
-**范围**：树中任意位置的全部 README、根目录的 `ADOPT.md` 消费方手册、`docs/**` 下的全部文档，以及 `.agents/rfcs/**`（RFC 目录树）下的全部文档，再减去下文的 manifest 排除项。依赖目录、缓存目录、构建产物目录、vendored（第三方源码）目录，以及 `src/hdsh/adopt/templates/` 下的打包接入镜像，只在发现阶段排除，不属于翻译源文档。
+**范围**：树中任意位置的全部 README、根目录的 `ADOPT.md` 消费方手册、`docs/**` 下的全部文档，以及 `.agents/rfcs/**`（RFC 目录树）下的全部文档，加上 manifest `roots` 列出的子树，再减去下文的 `excluded` 与 `governed` 条目。依赖目录、缓存目录、构建产物目录、vendored（第三方源码）目录，以及 `src/hdsh/adopt/templates/` 下的打包接入镜像，只在发现阶段排除，不属于翻译源文档。
 
-**排除**（永不配对，门禁拒绝为它们建 `.zh.md` 或 `.i18n.yaml`）：
+**排除**（永不配对，门禁拒绝为它们建 `.zh.md` 或 `.i18n.yaml`）。下列 agent 指令与翻译记忆文件是门禁自带的语料常量，manifest 不再为它们列条目：
 
 - `docs/AGENTS.md`、`.agents/rfcs/AGENTS.md`、`.agents/rfcs/implemented/AGENTS.md` 与 `.agents/rfcs/archived/AGENTS.md`：agent 指令，只以英文维护；根 `AGENTS.md` 同样不在语料范围内。
 - [terminology.md](terminology.md) 与 [style-samples.md](style-samples.md)：前者是中文侧的术语参考，后者本身即中英对照，配对检查对二者都没有意义。
 - `.agents/rfcs/archived/`：整个冻结的档案目录树，封存的历史记录仅供引用，绝不编辑、翻译或重新记录。
 
-**统一要求**：当前及今后纳入范围的每篇文档，合并时都必须构成完整的双语配对（bilingual pair）。[.hdsh/pairing.manifest.json](../../.hdsh/pairing.manifest.json) 只包含一个 `excluded` 数组、一个可选的 `generated` 数组（后者列出免于英侧切换行的生成英文源）和一个可选的 `public_blob_root` http(s) URL 前缀（接受绝对形态的切换行链接）——解析器拒绝任何其他字段——不存在逐文件推进清单、日期分界或 README 专用政策类别。
+**统一要求**：当前及今后纳入范围的每篇文档，合并时都必须构成完整的双语配对（bilingual pair）。[.hdsh/pairing.manifest.json](../../.hdsh/pairing.manifest.json) 只包含一个可选的 `excluded` 数组、一个可选的 `generated` 数组（后者列出免于英侧切换行的生成英文源）、一个可选的 `governed` 数组（命名由本仓库自行治理的双语内容：译文可以存在，门禁完全不看）、一个可选的 `roots` 数组（以尾斜杠子树前缀把语料扩展到标准范围之外）和一个可选的 `public_blob_root` http(s) URL 前缀（接受绝对形态的切换行链接）——解析器拒绝任何其他字段——不存在逐文件推进清单、日期分界或 README 专用政策类别。
 
 ## 分工
 
