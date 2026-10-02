@@ -21,26 +21,23 @@ _ROOT_PAIRED_DOCUMENT_ARTIFACT = re.compile(
 #: the frozen archive they are a discovery exclusion rather than manifest
 #: entries, because they carry the mirrored language files by design.
 _PACKAGED_DATA_PREFIXES = ("src/hdsh/adopt/templates/mirrors/",)
+#: Non-hidden directories that are never prose sources. Hidden directories
+#: are excluded as a class — any dot-prefixed path segment marks machine-owned
+#: territory — with the explicit corpus prefixes below the only exception.
 _NON_SOURCE_DIRECTORIES = frozenset(
     {
         "node_modules",
         "lib",
-        ".venv",
         "venv",
-        ".cache",
         "coverage",
         "build",
         "dist",
         "tmp",
         "__pycache__",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".local",
-        ".hdsh-env",
-        ".prek",
         "vendor",
     }
 )
+_EXPLICIT_CORPUS_PREFIXES = (".agents/rfcs/",)
 #: Corpus files the harness itself keeps English-only — agent instructions
 #: and the translation-memory references. These are corpus constants, not
 #: manifest entries: every adopter ships the same standard corpus, so the
@@ -58,8 +55,13 @@ _ENGLISH_ONLY_FILES = frozenset(
 
 
 def _is_excluded_path(file: str) -> bool:
+    if file.startswith(_EXPLICIT_CORPUS_PREFIXES):
+        return False
     segments = file.split("/")
-    return any(segment in _NON_SOURCE_DIRECTORIES for segment in segments)
+    return any(
+        segment in _NON_SOURCE_DIRECTORIES or (segment.startswith(".") and segment != ".")
+        for segment in segments
+    )
 
 
 def is_scope_file(file: str) -> bool:

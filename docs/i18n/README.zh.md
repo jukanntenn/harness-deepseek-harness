@@ -17,7 +17,7 @@
   foo.zh.md: 89e6c98d92887913cadf06b2adb97f26cde4849b
   ```
 
-  用 blob hash 而不是 commit hash，这样同一个 PR 里改动的文件也能算出记录（`git hash-object foo.md`），一致性是纯内容比较。重录会先把这些快照存入本地 Git 对象库再写下记录，未提交的 worktree 内容也不例外；它还会在内容寻址的 `refs/hdsh/pairing/snapshots/` ref 下固定每个不同的已存 blob，使垃圾回收无法让已记录的恢复指针失效。记录的 hash 能还原任一侧上次确认时的确切文本（`git cat-file -p <hash>`），所以失去同步的配对是「按被改一侧的 diff 最小化地修补另一侧」，从不整篇重译。日常工作会直接完成这份修补；用户显式调用扩展工作流时，可改由 `uv run hdsh pairing brief <pair>` 以能安全对齐的最窄粒度汇集这次更新，并由 `--apply` 在结构校验后拼接仅涉及围栏代码块的改动（[briefed-updates RFC](../../.agents/rfcs/implemented/process/2026-09-07-briefed-minimal-translation-updates.zh.md)）。两侧对齐后，`uv run hdsh pairing record <pair>` 重新记录两个 hash；那份 YAML diff 就是「确认一致」这个动作本身，可以被评审，也正因如此，`hdsh pairing record` 要求点名你确认过的配对（`hdsh pairing record --all` 是显式的全语料形式），裸调用会被拒绝：它会悄悄放过语料中每一对已经漂移的文档。
+  用 blob hash 而不是 commit hash，这样同一个 PR 里改动的文件也能算出记录（`git hash-object foo.md`），一致性是纯内容比较。重录会先把这些快照存入本地 Git 对象库再写下记录，未提交的 worktree 内容也不例外；它还会在内容寻址的 `refs/hdsh/pairing/snapshots/` ref 下固定每个不同的已存 blob，使垃圾回收无法让已记录的恢复指针失效。记录的 hash 能还原任一侧上次确认时的确切文本（`git cat-file -p <hash>`），所以失去同步的配对是「按被改一侧的 diff 最小化地修补另一侧」，从不整篇重译。日常工作会直接完成这份修补；用户显式调用扩展工作流时，可改由 `uv run hdsh pairing brief <pair>` 以能安全对齐的最窄粒度汇集这次更新，并由 `--apply` 在结构校验后拼接仅涉及围栏代码块的改动（[briefed-updates RFC](../../.agents/rfcs/implemented/process/2026-09-07-briefed-minimal-translation-updates.zh.md)）。两侧对齐后，`uv run hdsh pairing record <pair>` 重新记录两个 hash；那份 YAML diff 就是「确认一致」这个动作本身，可以被评审，也正因如此，`uv run hdsh pairing record` 要求点名你确认过的配对（`uv run hdsh pairing record --all` 是显式的全语料形式），裸调用会被拒绝：它会悄悄放过语料中每一对已经漂移的文档。
 
   当两个分支都包含同一配对的有效确认时，`hdsh-pairing` Git 合并驱动（merge driver）只会在 Git 默认文本合并能分别干净合并记录所指的英文三方 blob 与中文三方 blob，且合并后的配对仍保留必需的语言切换行、链接 locale 与结构签名时，才组合出一份新记录：中文侧必须保留指向英文的反链，普通撰写的英文源必须保留指向中文的链接，manifest `generated` 清单内的生成英文源不作此要求。该驱动由 `.gitattributes` 中针对 `*.i18n.yaml` 的 `merge=hdsh-pairing` 声明，并由 `uv run hdsh worktree install` 注册到当前 worktree。任何驱动无法验证的结构都保留为普通冲突；`uv run hdsh pairing merge --resolve` 会对已经停止的合并执行同一套遇错即保留冲突的操作：暂存每份可安全生成的配对记录，并在还有其他配对冲突时以非零状态退出。没有 `.gitattributes` 声明时驱动永不运行，记录按纯文本合并：不相邻的逐行改动干净组合但无结构校验，同条目改动以普通文本冲突，配对门禁在提交与 CI 兜底每一种情形。[双语配对门禁 RFC](../../.agents/rfcs/implemented/process/2026-09-07-bilingual-pairing-gate.zh.md) 负责记录该机制与备选方案。
 - **语言切换行。** 中文文件一律在 H1 标题后立即以 `[English](foo.md) | 中文` 链回英文，普通撰写的英文文件在同一位置以 `English | [中文](foo.zh.md)` 互链；两个标签位都可写 `中文` 或 `简体中文`，门禁两者皆收、风格规则择一；manifest `generated` 清单内的生成英文源省略此行，以便与生成器输出逐字节一致，其中文对侧仍链接回英文。发布到 GitHub 以外位置的 README（例如 PyPI 项目元数据）可以改用 manifest `public_blob_root` 前缀为同一对侧文件配置的绝对 URL，使切换行在该位置仍可访问。
@@ -35,7 +35,7 @@
 
 `uv run hdsh pairing verify <pair...>` 只检查被点名的配对——配对的三个文件中的任意一个（或其裸词干）都能点名它——因此更新循环几秒内就能验证自己的配对，而不必重新扫描全语料。`--cached <pairs...>` 检查被点名配对在暂存区中的确切字节；prek 钩子会在每次提交前对已暂存的 `.i18n.yaml` 记录运行它。CI 运行的是无参数的全语料形式；限定范围的绿灯在 PR 层面永远不能替代它。
 
-这个门禁带来的实际规则是：**当一个 PR 修改了已配对文档的任一侧时，同一个 PR 在术语指导下直接一次完成对侧文件的更新，并用 `hdsh pairing record <pair>` 重新记录配对**。留下失去同步的配对的 PR 会在 CI 变红。
+这个门禁带来的实际规则是：**当一个 PR 修改了已配对文档的任一侧时，同一个 PR 在术语指导下直接一次完成对侧文件的更新，并用 `uv run hdsh pairing record <pair>` 重新记录配对**。留下失去同步的配对的 PR 会在 CI 变红。
 
 门禁的限制很明确：**门禁通过意味着这组文档在当前内容上的一致性得到了确认，不代表确认本身正确可靠。** 它检查 hash 与 Markdown 结构；它无法判断两侧是否在说同样的话，也无法判断措辞是否准确、术语是否得当、行文是否自然；这部分约定由评审者把关，见 [translation-rules.md](translation-rules.zh.md)。重新记录了 hash 但另一侧翻得潦草的配对能通过门禁；它不得通过评审。
 

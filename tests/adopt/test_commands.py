@@ -59,12 +59,12 @@ class TestPlan:
     def test_plan_reports_every_blocker_without_writing(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        consumer.write("docs/AGENTS.md", "# conflicting standard\n")
-        commit_all(consumer, "conflicting standard")
+        consumer.write(".agents/skills/pushing/SKILL.md", "# conflicting skill\n")
+        commit_all(consumer, "conflicting skill")
         assert plan_cli(*adopt_arguments()) == 1
         error = capsys.readouterr().err
         assert "1 blocker(s) prevent adoption" in error
-        assert "docs/AGENTS.md" in error
+        assert ".agents/skills/pushing/SKILL.md" in error
         assert git("status", "--porcelain", cwd=consumer.root).stdout.strip() == ""
 
 
@@ -74,7 +74,7 @@ class TestApplyRoundTrip:
     ) -> None:
         assert apply_cli(*adopt_arguments()) == 0
         output = capsys.readouterr().out
-        assert "installed 48 file(s); recorded 7 pair(s)" in output
+        assert "installed 60 file(s); recorded 13 pair(s)" in output
         assert (consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md").is_file()
         assert (consumer.root / "docs" / "i18n" / "README.zh.md").is_file()
         assert (consumer.root / ".github" / "workflows" / "issue-policy.yml").is_file()
@@ -96,11 +96,22 @@ class TestApplyRoundTrip:
             encoding="utf-8"
         )
         assert 'rev = "v0.1.0"' in (consumer.root / "prek.toml").read_text(encoding="utf-8")
-        rewritten = (consumer.root / ".agents" / "rfcs" / "README.md").read_text(encoding="utf-8")
-        assert (
-            "https://github.com/jukanntenn/harness-deepseek-harness/blob/v0.1.0/"
-            "src/hdsh/rfc/format.py" in rewritten
+        transplanted = (consumer.root / ".agents" / "rfcs" / "README.md").read_text(
+            encoding="utf-8"
         )
+        assert "src/hdsh/rfc/format.py" not in transplanted
+        assert "https://github.com/jukanntenn/harness-deepseek-harness/blob/" not in transplanted
+        assert "`hdsh rfc verify`" in transplanted
+        moved = (
+            consumer.root
+            / ".agents"
+            / "rfcs"
+            / "implemented"
+            / "process"
+            / "2026-09-07-local-git-workflow.md"
+        ).read_text(encoding="utf-8")
+        assert "src/hdsh/scope.py" not in moved
+        assert "`hdsh scope`" in moved
         manifest = json.loads(
             (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
         )
@@ -162,11 +173,11 @@ class TestApplyRoundTrip:
     ) -> None:
         assert apply_cli(*adopt_arguments()) == 0
         commit_all(consumer, "adopt hdsh")
-        target = consumer.root / "docs" / "AGENTS.md"
+        target = consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md"
         target.write_text("# locally edited\n", encoding="utf-8")
         commit_all(consumer, "local edit")
         assert apply_cli(*adopt_arguments()) == 1
-        assert "docs/AGENTS.md" in capsys.readouterr().err
+        assert ".agents/skills/pushing/SKILL.md" in capsys.readouterr().err
         assert target.read_text(encoding="utf-8") == "# locally edited\n"
 
     def test_recording_failure_fails_the_application(
@@ -186,10 +197,12 @@ class TestApplyRoundTrip:
         git("add", "-A", cwd=consumer.root)
         git("commit", "-qm", "standing orders", cwd=consumer.root)
         assert plan_cli(*adopt_arguments()) == 0
-        assert "an existing root AGENTS.md was left untouched" in capsys.readouterr().out
+        assert "AGENTS.md: an existing standing-orders file was left untouched" in (
+            capsys.readouterr().out
+        )
         assert apply_cli(*adopt_arguments()) == 0
         output = capsys.readouterr().out
-        assert "an existing root AGENTS.md was left untouched" in output
+        assert "AGENTS.md: an existing standing-orders file was left untouched" in output
         assert (consumer.root / "AGENTS.md").read_text(encoding="utf-8") == "# ours\n"
         manifest = json.loads(
             (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
@@ -488,10 +501,10 @@ class TestBlockers:
     def test_refuses_conflicting_existing_targets(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        consumer.write("docs/AGENTS.md", "# conflicting standard\n")
+        consumer.write(".agents/skills/pushing/SKILL.md", "# conflicting skill\n")
         assert plan_cli(*adopt_arguments()) == 1
         error = capsys.readouterr().err
-        assert "docs/AGENTS.md" in error
+        assert ".agents/skills/pushing/SKILL.md" in error
         assert "adopt never overwrites consumer-owned files" in error
 
     def test_refuses_a_malformed_previous_manifest(
