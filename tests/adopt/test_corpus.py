@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
 from hdsh.adopt.corpus import (
     UPSTREAM_BLOB_ROOT,
     AdoptParameters,
     installed_destinations,
+    parse_slots,
     render_tokens,
     rewrite_upstream_links,
+    splice_slots,
 )
 
 PARAMETERS = AdoptParameters(
@@ -125,3 +129,57 @@ class TestRewriteUpstreamLinks:
     def test_images_are_rewritten_like_links(self) -> None:
         rewritten = self.rewrites("![logo](assets/brand.png)\n")
         assert rewritten == f"![logo]({UPSTREAM_BLOB_ROOT}/v0.1.0/docs/assets/brand.png)\n"
+
+
+class TestSlots:
+    TEMPLATE: str = (
+        "# Title\n\n"
+        "<!-- hdsh:slot command -->\n"
+        "TODO(adopt): State the command (hdsh: `uv run pytest`).\n"
+        "<!-- /hdsh:slot -->\n\n"
+        "Prose stays outside.\n\n"
+        "<!-- hdsh:slot second -->\n"
+        "line one\nline two\n"
+        "<!-- /hdsh:slot -->\n"
+    )
+
+    def test_parse_slots_reads_every_region(self) -> None:
+        slots = parse_slots(self.TEMPLATE)
+        assert slots == {
+            "command": "TODO(adopt): State the command (hdsh: `uv run pytest`).",
+            "second": "line one\nline two",
+        }
+
+    def test_splice_slots_replaces_contents(self) -> None:
+        spliced = splice_slots(self.TEMPLATE, {"command": "`cargo test`", "second": "x"})
+        assert "`cargo test`" in spliced
+        assert "uv run pytest" not in spliced
+        assert "<!-- hdsh:slot command -->\n`cargo test`\n<!-- /hdsh:slot -->" in spliced
+
+    def test_splice_slots_requires_every_value(self) -> None:
+        with pytest.raises(ValueError, match="slots without values: command"):
+            splice_slots(self.TEMPLATE, {"second": "x"})
+
+    def test_parse_rejects_a_slot_that_never_ends(self) -> None:
+        with pytest.raises(ValueError, match="never ends"):
+            parse_slots("<!-- hdsh:slot a -->\nbody\n")
+
+    def test_parse_rejects_an_unmatched_end(self) -> None:
+        with pytest.raises(ValueError, match="without a begin"):
+            parse_slots("body\n<!-- /hdsh:slot -->\n")
+
+    def test_parse_rejects_nested_slots(self) -> None:
+        with pytest.raises(ValueError, match="begins again"):
+            parse_slots("<!-- hdsh:slot a -->\n<!-- hdsh:slot b -->\nx\n<!-- /hdsh:slot -->\n")
+
+    def test_parse_rejects_duplicate_names(self) -> None:
+        text = (
+            "<!-- hdsh:slot a -->\nx\n<!-- /hdsh:slot -->\n"
+            "<!-- hdsh:slot a -->\ny\n<!-- /hdsh:slot -->\n"
+        )
+        with pytest.raises(ValueError, match="defined twice"):
+            parse_slots(text)
+
+    def test_parse_rejects_an_empty_body(self) -> None:
+        with pytest.raises(ValueError, match="empty body"):
+            parse_slots("<!-- hdsh:slot a -->\n\n<!-- /hdsh:slot -->\n")

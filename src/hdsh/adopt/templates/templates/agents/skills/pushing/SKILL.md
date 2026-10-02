@@ -1,11 +1,17 @@
 ---
 name: pushing
-description: Use before pushing, force-pushing, marking ready for review, or claiming checks pass on a harness-deepseek-harness branch, and immediately after gh stack sync publishes rewritten branches, to select the smallest tests and checks that cover the outgoing or just-published diff without reflexively running the full repository suite.
+description: Use before pushing, force-pushing, marking ready for review, or claiming checks pass on a branch of this repository, and immediately after gh stack sync publishes rewritten branches, to select the smallest tests and checks that cover the outgoing or just-published diff without reflexively running the full repository suite.
 ---
 
-# Pushing harness-deepseek-harness branches
+# Pushing branches
 
-Use this skill to run relevant local evidence once before a `harness-deepseek-harness` push. The sole ordering exception is `gh stack sync`, which may publish a cascading rebase before the rewritten layers can be validated; validate them immediately afterward and do not merge until the evidence passes. Hooks are worktree-local (install them with `uv run hdsh worktree install`) and intentionally narrow: pre-commit fixes staged lint and format with ruff, checks staged whitespace, verifies staged pairing records, and runs the RFC format and frozen-archive gates; pre-push runs only basedpyright. CI owns exhaustive coverage and the platform matrix.
+Use this skill to run relevant local evidence once before a push. The sole ordering exception is `gh stack sync`, which may publish a cascading rebase before the rewritten layers can be validated; validate them immediately afterward and do not merge until the evidence passes. Hooks are worktree-local (install them with `hdsh worktree install`) and intentionally narrow:
+
+<!-- hdsh:slot hooks -->
+TODO(adopt): Describe this repository's worktree hooks in one sentence, naming the pre-commit and pre-push checks (hdsh's own: pre-commit fixes staged lint and format with ruff, checks staged whitespace, verifies staged pairing records, and runs the RFC format and frozen-archive gates; pre-push runs only basedpyright).
+<!-- /hdsh:slot -->
+
+CI owns exhaustive coverage and the platform matrix.
 
 ## Inspect the outgoing change
 
@@ -19,7 +25,7 @@ git rev-parse --show-toplevel
 2. Verify the live PR base or stack parent, fetch that ref, and inspect the complete scope against it.
 
 ```sh
-uv run hdsh scope --base <merge-base-ref>
+hdsh scope --base <merge-base-ref>
 ```
 
 The command never guesses or fetches a base. Supply the ref verified from current remote or stack state; use `--head <ref>` when inspecting a commit other than `HEAD`. Its versioned JSON records committed paths relative to the resolved merge base, while staged, unstaged, and untracked paths describe the current worktree. After merging a changed base, rerun the report, reassess which behavior the combined scope can affect, and rerun only checks invalidated by the merge.
@@ -28,27 +34,54 @@ The command never guesses or fetches a base. Supply the ref verified from curren
 
 There is no universal local baseline beyond the hooks. Every behavior change needs the narrowest available test or purpose-built check that would fail for its regression; add broader checks only for surfaces the diff actually reaches.
 
-- **Python behavior:** run the owning pytest file or focused test name (`uv run pytest tests/<behavior>.py -k <name>`). Add adjacent test files when a shared contract changes; leave the full suite to CI unless the change is genuinely cross-cutting or the user requests it.
-- **Documentation:** run `uv run hdsh pairing verify`; re-record a reviewed pair with `uv run hdsh pairing record <pair>`. Decision records under `.agents/rfcs/` additionally run `uv run hdsh rfc verify`.
-- **Typed source:** run `uv run basedpyright` when the diff touches annotations the checker owns in `src/` or `tests/`.
-- **Packaging or entry points:** after changing `pyproject.toml`, `prek.toml`, or `.pre-commit-hooks.yaml`, run `uv sync` and the owning smoke for each changed console script (for example `uv run hdsh scope --base origin/main` or the focused tests).
-- **Style beyond staged files:** the pre-commit fixers cover staged files only; run `uv run ruff check .` and `uv run ruff format --check .` when relevant files are not yet staged.
+- **Behavior:** run the focused tests owning the changed behavior.
 
-Do not manually repeat a passing check merely because commit or push follows. In particular, do not run basedpyright immediately before pushing solely to duplicate the pre-push hook.
+<!-- hdsh:slot focused-tests -->
+TODO(adopt): State this repository's focused-test command and layout (hdsh's own: run the owning pytest file or focused test name `uv run pytest tests/<behavior>.py -k <name>`; add adjacent test files when a shared contract changes; leave the full suite to CI unless the change is genuinely cross-cutting or the user requests it).
+<!-- /hdsh:slot -->
+
+- **Documentation:** run `hdsh pairing verify`; re-record a reviewed pair with `hdsh pairing record <pair>`. Decision records under `.agents/rfcs/` additionally run `hdsh rfc verify`.
+- **Typed source:** run the repository's type check when the diff touches annotations it owns.
+
+<!-- hdsh:slot type-check -->
+TODO(adopt): Name the type check and the tree it owns (hdsh's own: `uv run basedpyright`, owning annotations across `src/` and `tests/`).
+<!-- /hdsh:slot -->
+
+- **Packaging or entry points:**
+
+<!-- hdsh:slot packaging-smoke -->
+TODO(adopt): State the packaging-change smoke for this repository (hdsh's own: after changing `pyproject.toml`, `prek.toml`, or `.pre-commit-hooks.yaml`, run `uv sync` and the owning smoke for each changed console script, for example `hdsh scope --base origin/main` or the focused tests).
+<!-- /hdsh:slot -->
+
+- **Style beyond staged files:** the pre-commit fixers cover staged files only; run the repository's whole-tree style checks when relevant files are not yet staged.
+
+<!-- hdsh:slot style-check -->
+TODO(adopt): Name the whole-tree style checks (hdsh's own: `uv run ruff check .` and `uv run ruff format --check .`).
+<!-- /hdsh:slot -->
+
+Do not manually repeat a passing check merely because commit or push follows. In particular, do not duplicate the pre-push hook's check immediately before pushing.
 
 ### Focus unit coverage on the affected source
 
-Test selection and coverage selection are separate. A pytest path or `-k` filter chooses which tests run, while the repository configuration measures every `src/hdsh/**` module and fails the run under 100% branch coverage. A focused subset therefore suspends the aggregate threshold only to inspect the affected modules, never to bless them:
+<!-- hdsh:slot coverage -->
+TODO(adopt): State how focused coverage runs in this repository and what the aggregate gate demands (hdsh's own: the configuration measures every `src/hdsh/**` module and fails under 100% branch coverage, so a focused subset suspends the aggregate threshold only to inspect the affected modules:
 
 ```sh
 uv run pytest tests/test_<behavior>.py --cov-fail-under=0 --cov-report=term-missing
 ```
 
-Name both the owning tests and the source modules whose coverage those tests must prove, and read the report for exactly those modules. The unmodified `uv run pytest` remains the gate that must pass before the change lands, and CI re-runs it on the full matrix. Do not delete branches, exclude modules from measurement, or weaken assertions merely to hide an uncovered affected file; add the missing owning tests instead.
+Name both the owning tests and the source modules whose coverage those tests must prove, and read the report for exactly those modules; the unmodified full test run remains the gate that must pass before the change lands).
+<!-- /hdsh:slot -->
+
+Do not delete branches, exclude modules from measurement, or weaken assertions merely to hide an uncovered affected file; add the missing owning tests instead.
 
 ## Full local rehearsal
 
-Run the complete local approximation only when the user explicitly requests it, while diagnosing a CI failure, or when the change spans the repository so broadly that no narrower set is credible. The full local set is `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and `uv run pytest`.
+Run the complete local approximation only when the user explicitly requests it, while diagnosing a CI failure, or when the change spans the repository so broadly that no narrower set is credible. The full local set is:
+
+<!-- hdsh:slot full-suite -->
+TODO(adopt): List the complete local check set (hdsh's own: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and `uv run pytest`).
+<!-- /hdsh:slot -->
 
 ## Protect history-rewriting pushes
 
@@ -83,8 +116,8 @@ If a failure looks environment-specific, prove it:
 For ordinary and standalone rebase pushes:
 
 1. Run the selected relevant checks once.
-2. Commit normally and inspect any files changed by the ruff fixers before continuing.
-3. Push normally, or use the exact lease for an authorized rewritten branch, so the pre-push basedpyright hook runs.
+2. Commit normally and inspect any files changed by fixer hooks before continuing.
+3. Push normally, or use the exact lease for an authorized rewritten branch, so the pre-push hook runs.
 4. Verify the remote ref matches local `HEAD`.
 
 ```sh

@@ -59,12 +59,12 @@ class TestPlan:
     def test_plan_reports_every_blocker_without_writing(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        consumer.write(".agents/skills/pushing/SKILL.md", "# conflicting skill\n")
+        consumer.write(".agents/skills/merging-stacked-prs/SKILL.md", "# conflicting skill\n")
         commit_all(consumer, "conflicting skill")
         assert plan_cli(*adopt_arguments()) == 1
         error = capsys.readouterr().err
         assert "1 blocker(s) prevent adoption" in error
-        assert ".agents/skills/pushing/SKILL.md" in error
+        assert ".agents/skills/merging-stacked-prs/SKILL.md" in error
         assert git("status", "--porcelain", cwd=consumer.root).stdout.strip() == ""
 
 
@@ -173,11 +173,11 @@ class TestApplyRoundTrip:
     ) -> None:
         assert apply_cli(*adopt_arguments()) == 0
         commit_all(consumer, "adopt hdsh")
-        target = consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md"
+        target = consumer.root / ".agents" / "skills" / "merging-stacked-prs" / "SKILL.md"
         target.write_text("# locally edited\n", encoding="utf-8")
         commit_all(consumer, "local edit")
         assert apply_cli(*adopt_arguments()) == 1
-        assert ".agents/skills/pushing/SKILL.md" in capsys.readouterr().err
+        assert ".agents/skills/merging-stacked-prs/SKILL.md" in capsys.readouterr().err
         assert target.read_text(encoding="utf-8") == "# locally edited\n"
 
     def test_recording_failure_fails_the_application(
@@ -501,10 +501,10 @@ class TestBlockers:
     def test_refuses_conflicting_existing_targets(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        consumer.write(".agents/skills/pushing/SKILL.md", "# conflicting skill\n")
+        consumer.write(".agents/skills/merging-stacked-prs/SKILL.md", "# conflicting skill\n")
         assert plan_cli(*adopt_arguments()) == 1
         error = capsys.readouterr().err
-        assert ".agents/skills/pushing/SKILL.md" in error
+        assert ".agents/skills/merging-stacked-prs/SKILL.md" in error
         assert "adopt never overwrites consumer-owned files" in error
 
     def test_refuses_a_malformed_previous_manifest(
@@ -565,11 +565,13 @@ class TestVerify:
         target.write_text("# edited\n", encoding="utf-8")
         (consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md").unlink()
         (consumer.root / "docs" / "architecture.md").unlink()
+        (consumer.root / ".agents" / "rfcs" / "README.md").unlink()
         capsys.readouterr()
         assert verify_cli() == 1
         error = capsys.readouterr().err
         assert "docs/AGENTS.md: content differs" in error
         assert ".agents/skills/pushing/SKILL.md: missing" in error
+        assert ".agents/rfcs/README.md: missing" in error
         assert "docs/architecture.md: missing" in error
 
     def test_pending_merge_names_the_missing_harness_anchors(
@@ -633,6 +635,7 @@ class TestPrekBlockUnits:
             "hdsh-docs-wrap",
             "hdsh-docs-links",
             "hdsh-docs-budgets",
+            "hdsh-adopt-verify",
         ):
             assert f'{{ id = "{hook}", groups = ["hdsh"] }}' in block
 
@@ -653,6 +656,120 @@ class TestPrekBlockUnits:
     def test_append_to_content_without_a_trailing_newline(self) -> None:
         updated = _apply_prek_block("x = 1", _managed_prek_block("v1"))
         assert updated.startswith("x = 1\n")
+
+
+class TestSlotTemplates:
+    def test_fresh_apply_installs_guidance_and_verify_demands_fills(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        skill = consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        assert "<!-- hdsh:slot focused-tests -->" in text
+        assert "TODO(adopt):" in text
+        manifest = json.loads(
+            (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
+        )
+        assert ".agents/skills/pushing/SKILL.md" in manifest["slotTemplates"]
+        assert manifest["slotGuidance"][".agents/skills/pushing/SKILL.md"]["focused-tests"]
+        capsys.readouterr()
+        assert verify_cli() == 1
+        output = capsys.readouterr().out
+        assert ".agents/skills/pushing/SKILL.md:" in output
+        assert "TODO(adopt):" in output
+
+    def test_reapply_preserves_filled_slot_values(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        skill = consumer.root / ".agents" / "skills" / "archiving-rfcs" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        guidance = (
+            "TODO(adopt): Name this repository's focused tests for the archive path "
+            "(hdsh's own: `uv run pytest tests/rfc/test_archive.py`)."
+        )
+        filled = text.replace(guidance, "`cargo test --test archive`")
+        skill.write_text(filled, encoding="utf-8")
+        commit_all(consumer, "fill the archive-tests slot")
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert "1 consumer slot value(s) preserved" in output
+        assert "`cargo test --test archive`" in skill.read_text(encoding="utf-8")
+
+    def test_reapply_resets_a_filled_slot_whose_guidance_changed(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        skill = consumer.root / ".agents" / "skills" / "archiving-rfcs" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        guidance = (
+            "TODO(adopt): Name this repository's focused tests for the archive path "
+            "(hdsh's own: `uv run pytest tests/rfc/test_archive.py`)."
+        )
+        filled = text.replace(guidance, "`cargo test --test archive`")
+        skill.write_text(filled, encoding="utf-8")
+        commit_all(consumer, "fill the slot")
+        manifest_path = consumer.root / ".hdsh" / "adopt.manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["slotGuidance"][".agents/skills/archiving-rfcs/SKILL.md"]["archive-tests"] = (
+            "0" * 64
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        commit_all(consumer, "stale guidance baseline")
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert "upstream changed the archive-tests slot guidance" in output
+        assert "TODO(adopt):" in skill.read_text(encoding="utf-8")
+
+    def test_malformed_installed_slot_markers_block_reapplication(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        skill = consumer.root / ".agents" / "skills" / "reviewing" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8").replace("<!-- /hdsh:slot -->\n", "", 1)
+        skill.write_text(text, encoding="utf-8")
+        commit_all(consumer, "break the slot markers")
+        assert apply_cli(*adopt_arguments()) == 1
+        assert "slot text is malformed" in capsys.readouterr().err
+
+    def test_consumer_edits_outside_slots_are_replaced_not_blocked(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        skill = consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8").replace("# Pushing branches", "# locally retitled")
+        skill.write_text(text, encoding="utf-8")
+        commit_all(consumer, "local retitle")
+        assert apply_cli(*adopt_arguments()) == 0
+        assert "# Pushing branches" in skill.read_text(encoding="utf-8")
+
+    def test_verify_reports_missing_slot_template_as_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        (consumer.root / ".agents" / "skills" / "reviewing" / "SKILL.md").unlink()
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert ".agents/skills/reviewing/SKILL.md: missing" in capsys.readouterr().err
+
+    def test_hook_mode_still_fails_on_a_malformed_manifest(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        consumer.write(".hdsh/adopt.manifest.json", "[]\n")
+        commit_all(consumer, "malformed manifest")
+        request = parse_command(adopt_commands.register, ["verify", "--hook"])
+        capsys.readouterr()
+        assert verify_main(request) == 1
+        assert "must be a JSON object" in capsys.readouterr().err
+
+    def test_hook_mode_is_a_no_op_without_a_manifest(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        request = parse_command(adopt_commands.register, ["verify", "--hook"])
+        capsys.readouterr()
+        assert verify_main(request) == 0
+        assert "nothing to verify" in capsys.readouterr().out
 
 
 class TestRequiredAnchorsUnits:

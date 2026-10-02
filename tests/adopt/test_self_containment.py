@@ -17,6 +17,7 @@ from hdsh.adopt import corpus
 _MIRRORS_ROOT = Path(corpus.__file__).parent / "templates" / "mirrors"
 _INSTALLED = corpus.installed_destinations("2026-01-01")
 _BARE_INVOCATION = re.compile(r"`hdsh [a-z]")
+_NON_HDSH_UV_COMMAND = re.compile(r"`uv run (?!hdsh)[a-z]")
 
 
 def _mirror_documents() -> list[tuple[str, str]]:
@@ -45,6 +46,10 @@ class TestSelfContainment:
     def test_source_corpus_uses_only_the_uv_invocation_form(self) -> None:
         for dest, text in _mirror_documents():
             assert _BARE_INVOCATION.search(text) is None, dest
+
+    def test_source_corpus_carries_no_development_commands(self) -> None:
+        for dest, text in _mirror_documents():
+            assert _NON_HDSH_UV_COMMAND.search(text) is None, dest
 
     def test_every_cited_decision_record_moves_with_the_corpus(self) -> None:
         for anchor in corpus.RFC_CLOSURE:

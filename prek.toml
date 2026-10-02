@@ -32,4 +32,5 @@ hooks = [
     { id = "hdsh-docs-links", name = "markdown cross-links", entry = "uv run --no-sync hdsh docs links", language = "system", files = '\.md$', pass_filenames = false },
     { id = "hdsh-docs-budgets", name = "doc budgets", entry = "uv run --no-sync hdsh docs budgets", language = "system", files = '\.md$|\.hdsh/docs\.manifest', pass_filenames = false },
     { id = "hdsh-basedpyright", name = "basedpyright", entry = "uv run --no-sync basedpyright", language = "system", stages = ["pre-push"], pass_filenames = false, always_run = true, require_serial = true },
+    { id = "hdsh-adopt-verify", name = "adoption completion", entry = "uv run --no-sync hdsh adopt verify --hook", language = "system", pass_filenames = false, always_run = true },
 ]
