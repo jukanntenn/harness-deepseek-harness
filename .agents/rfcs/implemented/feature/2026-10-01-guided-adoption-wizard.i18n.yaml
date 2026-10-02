@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/feature/2026-10-01-guided-adoption-wizard.md
+2026-10-01-guided-adoption-wizard.md: e72b10091a909a4373805f09362884681f32289a
+2026-10-01-guided-adoption-wizard.zh.md: 95c119af9aca823ed5443d4c9aaa3dac35a61b69

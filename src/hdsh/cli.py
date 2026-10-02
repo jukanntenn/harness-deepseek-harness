@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from hdsh import scope
 from hdsh.adopt import commands as adopt_commands
+from hdsh.adopt import wizard as adopt_wizard
 from hdsh.cliargs import ArgumentParser, CommandSubparsers, HelpShown
 from hdsh.docs import budgets, links, wrap
 from hdsh.pairing import brief as pairing_brief
@@ -52,7 +53,11 @@ _COMMAND_DOMAINS: tuple[tuple[str, str, tuple[Registrar, ...]], ...] = (
     ("rfc", "RFC format gates", (rfc_format.register, rfc_archive.register)),
     ("policy", "GitHub issue and pull-request policy", (policy_commands.register,)),
     ("worktree", "worktree-local prek hooks", (worktree_install.register,)),
-    ("adopt", "consumer adoption of the harness", (adopt_commands.register,)),
+    (
+        "adopt",
+        "consumer adoption of the harness",
+        (adopt_commands.register, adopt_wizard.register),
+    ),
 )
 
 
