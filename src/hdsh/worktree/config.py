@@ -14,16 +14,37 @@ from hdsh.worktree.ownership import lstat_if_present
 
 _CONFIG_PAIR_FIELDS = 3
 REPOSITORY_EXTENSION_PATTERN = re.compile(r"^extensions\.")
+BARE_PAIRING_MERGE_DRIVER_COMMAND = "hdsh pairing merge-driver %O %A %B %P"
 PAIRING_MERGE_DRIVER_COMMAND = "uv run --no-sync hdsh pairing merge-driver %O %A %B %P"
 LEGACY_PAIRING_MERGE_DRIVER_COMMAND = "scripts/pairing-merge-driver.sh %O %A %B %P"
-PAIRING_MERGE_DRIVER_CONFIG = (
-    ("merge.hdsh-pairing.name", "harness-deepseek-harness bilingual pairing records"),
-    (
-        "merge.hdsh-pairing.driver",
-        PAIRING_MERGE_DRIVER_COMMAND,
-    ),
-)
+BARE_PAIRING_MERGE_DRIVER_PROBE = ("hdsh", "pairing", "merge", "--probe")
 PAIRING_MERGE_DRIVER_PROBE = ("uv", "run", "--no-sync", "hdsh", "pairing", "merge", "--probe")
+#: Resolution order for the registered driver command: the bare form is the
+#: consumer canon (host-installed hdsh); the uv form serves machines whose
+#: only hdsh lives in a project environment.
+_PAIRING_MERGE_DRIVER_FORMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (BARE_PAIRING_MERGE_DRIVER_COMMAND, BARE_PAIRING_MERGE_DRIVER_PROBE),
+    (PAIRING_MERGE_DRIVER_COMMAND, PAIRING_MERGE_DRIVER_PROBE),
+)
+#: Commands an earlier installation may have registered; all migrate to the
+#: freshly resolved form instead of refusing as foreign.
+KNOWN_PAIRING_MERGE_DRIVER_COMMANDS = frozenset(
+    {
+        BARE_PAIRING_MERGE_DRIVER_COMMAND,
+        PAIRING_MERGE_DRIVER_COMMAND,
+        LEGACY_PAIRING_MERGE_DRIVER_COMMAND,
+    }
+)
+
+
+def _pairing_merge_driver_config(driver: str) -> tuple[tuple[str, str], ...]:
+    """The worktree-local driver key/value pairs for one resolved command."""
+    return (
+        ("merge.hdsh-pairing.name", "harness-deepseek-harness bilingual pairing records"),
+        ("merge.hdsh-pairing.driver", driver),
+    )
+
+
 _INTEGER = re.compile(r"-?\d+")
 
 
@@ -359,13 +380,14 @@ def _restore_worktree_changes(
 
 
 def install_pairing_merge_driver(
-    root: str, worktree_config_path: str
+    root: str, worktree_config_path: str, driver: str
 ) -> list[tuple[str, str | None]]:
-    """Register the pairing merge driver as worktree-local config.
+    """Register the resolved pairing merge driver as worktree-local config.
 
     Args:
         root: Repository root.
         worktree_config_path: Worktree config file path.
+        driver: The driver command resolved by :func:`probe_pairing_merge_driver`.
 
     Returns:
         The ``(key, previous value)`` changes this call made; a ``None``
@@ -378,7 +400,7 @@ def install_pairing_merge_driver(
     """
     changes: list[tuple[str, str | None]] = []
     try:
-        for key, expected in PAIRING_MERGE_DRIVER_CONFIG:
+        for key, expected in _pairing_merge_driver_config(driver):
             entries = included_config_entries(root, worktree_config_path, key)
             included_foreign = next(
                 (e for e in entries if not origin_is_file(e["origin"], root, worktree_config_path)),
@@ -407,7 +429,7 @@ def install_pairing_merge_driver(
             if existing is not None and existing != expected:
                 if (
                     key == "merge.hdsh-pairing.driver"
-                    and existing == LEGACY_PAIRING_MERGE_DRIVER_COMMAND
+                    and existing in KNOWN_PAIRING_MERGE_DRIVER_COMMANDS
                 ):
                     run_git(root, ["config", "--worktree", key, expected])
                     changes.append((key, existing))
@@ -484,27 +506,44 @@ def environment_without_command_git_config() -> dict[str, str]:
     return env
 
 
-def probe_pairing_merge_driver(root: str) -> None:
-    """Verify the pairing merge runtime before any config is published.
+def probe_pairing_merge_driver(root: str) -> str:
+    """Resolve the pairing merge-driver command by probing each candidate form.
+
+    Args:
+        root: Repository root the probes run in.
+
+    Returns:
+        The driver command whose probe succeeded — the exact form to register,
+        so what was probed and what is registered are one ledger.
 
     Raises:
-        WorktreeError: When the probe cannot start or exits unsuccessfully.
+        WorktreeError: When no candidate form runs, naming each failure and
+            the installation step that would fix it.
     """
-    try:
-        result = subprocess.run(
-            PAIRING_MERGE_DRIVER_PROBE,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as error:
-        msg = f"hdsh pairing merge --probe failed: {error}"
-        raise WorktreeError(msg) from error
-    if result.returncode != 0:
+    failures: list[str] = []
+    for command, probe in _PAIRING_MERGE_DRIVER_FORMS:
+        try:
+            result = subprocess.run(
+                probe,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as error:
+            failures.append(f"{probe[0]}: {error}")
+            continue
+        if result.returncode == 0:
+            return command
         detail = result.stderr.strip() or f"exit status {result.returncode}"
-        msg = f"hdsh pairing merge --probe failed: {detail}"
-        raise WorktreeError(msg)
+        failures.append(f"{' '.join(probe)}: {detail}")
+    msg = (
+        "no runnable hdsh for the pairing merge driver (tried: "
+        + "; ".join(failures)
+        + "). Install it with `uv tool install harness-deepseek-harness`, or run "
+        "inside a uv project that provides hdsh, then rerun"
+    )
+    raise WorktreeError(msg)
 
 
 def run_prek(root: str) -> None:

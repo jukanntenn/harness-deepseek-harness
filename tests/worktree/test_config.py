@@ -30,8 +30,11 @@ def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     def skipped(root: str) -> None:
         return None
 
+    def resolved(root: str) -> str:
+        return worktree_config.PAIRING_MERGE_DRIVER_COMMAND
+
     monkeypatch.setattr(worktree_install, "run_prek", skipped)
-    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", skipped)
+    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", resolved)
 
 
 class TestGitHelpers:
@@ -253,7 +256,7 @@ class TestEnvironmentScrub:
     def test_probe_failure_raises_with_stderr(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["uv"], 1, "", "no runtime\n")
         monkeypatch.setattr(subprocess, "run", completed_run(completed))
-        with pytest.raises(WorktreeError, match="--probe failed: no runtime"):
+        with pytest.raises(WorktreeError, match="no runnable hdsh.*no runtime.*uv tool install"):
             worktree_config.probe_pairing_merge_driver("/repo")
 
     def test_probe_failure_without_stderr_names_status(
@@ -261,7 +264,7 @@ class TestEnvironmentScrub:
     ) -> None:
         completed = subprocess.CompletedProcess(["uv"], 3, "", "")
         monkeypatch.setattr(subprocess, "run", completed_run(completed))
-        with pytest.raises(WorktreeError, match="--probe failed: exit status 3"):
+        with pytest.raises(WorktreeError, match="exit status 3"):
             worktree_config.probe_pairing_merge_driver("/repo")
 
     def test_probe_oserror(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -269,13 +272,43 @@ class TestEnvironmentScrub:
             raise OSError("no uv")
 
         monkeypatch.setattr(subprocess, "run", raising_run)
-        with pytest.raises(WorktreeError, match="probe failed: no uv"):
+        with pytest.raises(WorktreeError, match="no runnable hdsh.*no uv"):
             worktree_config.probe_pairing_merge_driver("/repo")
 
-    def test_probe_success_returns(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        completed = subprocess.CompletedProcess(["uv"], 0, "", "")
+    def test_probe_prefers_the_bare_form(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        completed = subprocess.CompletedProcess(["hdsh"], 0, "", "")
         monkeypatch.setattr(subprocess, "run", completed_run(completed))
-        worktree_config.probe_pairing_merge_driver("/repo")
+        assert (
+            worktree_config.probe_pairing_merge_driver("/repo")
+            == worktree_config.BARE_PAIRING_MERGE_DRIVER_COMMAND
+        )
+
+    def test_probe_falls_back_to_the_uv_form(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        results = {
+            "hdsh": subprocess.CompletedProcess(["hdsh"], 1, "", "not on PATH\n"),
+            "uv": subprocess.CompletedProcess(["uv"], 0, "", ""),
+        }
+
+        def selective_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            return results[command[0]]
+
+        monkeypatch.setattr(subprocess, "run", selective_run)
+        assert (
+            worktree_config.probe_pairing_merge_driver("/repo")
+            == worktree_config.PAIRING_MERGE_DRIVER_COMMAND
+        )
+
+    def test_probe_oserror_on_one_form_falls_through(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def selective_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            if command[0] == "hdsh":
+                raise OSError("no hdsh")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", selective_run)
+        assert (
+            worktree_config.probe_pairing_merge_driver("/repo")
+            == worktree_config.PAIRING_MERGE_DRIVER_COMMAND
+        )
 
 
 class TestWorktreeConfigMigration:

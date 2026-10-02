@@ -63,6 +63,18 @@ class TestLoadManifest:
         with pytest.raises(ManifestError, match="files object"):
             load_manifest(str(tmp_path))
 
+    def test_malformed_pending_merges_list_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / ".hdsh" / "adopt.manifest.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps(
+                {"hdshVersion": "0.1.0", "hdshRef": "v0.1.0", "files": {}, "pendingMerges": "x"}
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ManifestError, match="pendingMerges list"):
+            load_manifest(str(tmp_path))
+
     def test_round_trip_preserves_state(self, tmp_path: Path) -> None:
         save_manifest(
             str(tmp_path),
@@ -71,6 +83,7 @@ class TestLoadManifest:
                 hdsh_ref="v0.1.0",
                 files={"a.md": "d1"},
                 editable=("AGENTS.md",),
+                pending_merges=("AGENTS.md",),
             ),
         )
         loaded = load_manifest(str(tmp_path))
@@ -78,3 +91,4 @@ class TestLoadManifest:
         assert loaded.hdsh_ref == "v0.1.0"
         assert loaded.files == {"a.md": "d1"}
         assert loaded.editable == ("AGENTS.md",)
+        assert loaded.pending_merges == ("AGENTS.md",)

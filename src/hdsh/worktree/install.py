@@ -98,11 +98,15 @@ def _is_registered_owned_hooks_path(common_directory: str, hooks_path: str) -> b
     return inspected is not None and inspected["hooksPath"] == hooks_path
 
 
-def install(root: str) -> None:
+def install(root: str) -> str:
     """Install worktree-local prek hooks and the pairing merge driver.
 
     Args:
         root: Repository root (a linked worktree or the main worktree).
+
+    Returns:
+        The registered pairing merge-driver command, resolved by probing the
+        exact form that will run on this machine.
 
     Raises:
         WorktreeError: When any safety precondition fails; owned changes roll
@@ -208,8 +212,8 @@ def install(root: str) -> None:
         path_changed = False
         driver_changes: list[tuple[str, str | None]] = []
         try:
-            probe_pairing_merge_driver(root)
-            driver_changes = install_pairing_merge_driver(root, worktree_config_path)
+            driver = probe_pairing_merge_driver(root)
+            driver_changes = install_pairing_merge_driver(root, worktree_config_path, driver)
             run_git(root, ["config", "--worktree", "core.hooksPath", hooks_path])
             path_changed = worktree_hooks_value != hooks_path
             installed = effective_config_entry(root, "core.hooksPath")
@@ -254,6 +258,8 @@ def install(root: str) -> None:
                 )
                 raise WorktreeError(msg) from error
             raise
+        else:
+            return driver
     except Exception as error:
         installation_error = error
         raise
@@ -290,8 +296,9 @@ def main(_args: argparse.Namespace) -> int:
     if probe.returncode != 0:
         return 0
     try:
-        install(strip_git_line_terminator(probe.stdout))
+        driver = install(strip_git_line_terminator(probe.stdout))
     except WorktreeError as error:
         print(f"[{TOOL}] {error}", file=sys.stderr)
         return 1
+    print(f"[{TOOL}] pairing merge driver registered: {driver}")
     return 0

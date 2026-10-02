@@ -135,6 +135,10 @@ _ORGANIZATION_CREDENTIAL_INPUTS = (
 
 _MARKDOWN_LINK = re.compile(r"(\]\()([^)\s]+)(\))")
 _OPENING_FENCE = re.compile(r"^\s*(?:```|~~~)")
+#: An inline code span: an opening backtick run, no backticks inside, and a
+#: closing run of the same length. Link-shaped text inside is example prose,
+#: never a reference to rewrite.
+_INLINE_CODE_SPAN = re.compile(r"(`+)[^`]*?\1")
 
 
 @dataclass(frozen=True)
@@ -269,7 +273,7 @@ def rewrite_upstream_links(
 def _rewrite_line_links(
     line: str, *, directory: str, installed: frozenset[str], hdsh_ref: str
 ) -> str:
-    """Rewrite the markdown links of one prose line."""
+    """Rewrite the markdown links of one prose line, skipping code spans."""
 
     def replace(match: re.Match[str]) -> str:
         target = match.group(2)
@@ -282,4 +286,11 @@ def _rewrite_line_links(
         upstream = f"{UPSTREAM_BLOB_ROOT}/{hdsh_ref}/{resolved}"
         return f"{match.group(1)}{upstream}{separator}{fragment}{match.group(3)}"
 
-    return _MARKDOWN_LINK.sub(replace, line)
+    pieces: list[str] = []
+    position = 0
+    for span in _INLINE_CODE_SPAN.finditer(line):
+        pieces.append(_MARKDOWN_LINK.sub(replace, line[position : span.start()]))
+        pieces.append(span.group(0))
+        position = span.end()
+    pieces.append(_MARKDOWN_LINK.sub(replace, line[position:]))
+    return "".join(pieces)

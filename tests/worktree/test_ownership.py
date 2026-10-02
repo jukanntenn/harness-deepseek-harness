@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from hdsh.worktree import install as worktree_install
+from hdsh.worktree.config import PAIRING_MERGE_DRIVER_COMMAND
 from hdsh.worktree.git import WorktreeError
 from hdsh.worktree.install import install
 from hdsh.worktree.ownership import (
@@ -49,8 +50,11 @@ def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     def skipped(root: str) -> None:
         return None
 
+    def resolved(root: str) -> str:
+        return PAIRING_MERGE_DRIVER_COMMAND
+
     monkeypatch.setattr(worktree_install, "run_prek", skipped)
-    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", skipped)
+    monkeypatch.setattr(worktree_install, "probe_pairing_merge_driver", resolved)
 
 
 def _no_sleep(seconds: float) -> None:

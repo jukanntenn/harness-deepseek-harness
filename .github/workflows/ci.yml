@@ -134,17 +134,17 @@ jobs:
             script=".github/actions/$action/scripts/flavor.py"
             grep -q "using: composite" ".github/actions/$action/action.yml"
             grep -q "hdsh-ref:" ".github/actions/$action/action.yml"
-            CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN=token APP_CLIENT_ID= APP_PRIVATE_KEY= \
+            CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN=token APP_CLIENT_ID='' APP_PRIVATE_KEY='' \
               GITHUB_OUTPUT="$fixture/output" python "$script" "$action"
             grep -q "account-type=user" "$fixture/output"
             rm -f "$fixture/output"
-            if CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN= APP_CLIENT_ID= APP_PRIVATE_KEY= \
+            if CONFIG_PATH="$fixture/user.json" PROJECT_TOKEN='' APP_CLIENT_ID='' APP_PRIVATE_KEY='' \
               GITHUB_OUTPUT="$fixture/output" python "$script" "$action" 2>"$fixture/err"; then
               echo "::error::user flavor without project-token must fail loud"
               exit 1
             fi
             grep -q "requires the project-token input" "$fixture/err"
-            if CONFIG_PATH="$fixture/org.json" PROJECT_TOKEN=token APP_CLIENT_ID= APP_PRIVATE_KEY= \
+            if CONFIG_PATH="$fixture/org.json" PROJECT_TOKEN=token APP_CLIENT_ID='' APP_PRIVATE_KEY='' \
               GITHUB_OUTPUT="$fixture/output" python "$script" "$action" 2>"$fixture/err"; then
               echo "::error::organization flavor without app credentials must fail loud"
               exit 1
@@ -183,3 +183,22 @@ jobs:
             exit 1
           fi
           grep -q "does not match the event repository" "$fixture/err"
+      - name: Rehearse the consumer engine install
+        # The composite actions install the engine from the action's own
+        # repository at the pinned ref; this step proves that exact install
+        # path — URL shape, packaging, entry points — the way a consumer
+        # workflow experiences it, with this repository standing in for the
+        # consumer's resolved action repository.
+        run: |
+          set -eu
+          for action in issue-policy issue-lifecycle; do
+            grep -q "github.action_repository || github.repository" ".github/actions/$action/action.yml"
+          done
+          uv tool run --from "harness-deepseek-harness @ git+https://github.com/${{ github.repository }}.git@${{ github.sha }}" hdsh --help >/dev/null
+      - name: Lint the workflows with actionlint
+        # actionlint's bundled schema can lag GitHub's accepted activity
+        # types; the pinned release's known gaps are excluded in
+        # .github/actionlint.yaml together with their removal condition.
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+        with:
+          args: -color

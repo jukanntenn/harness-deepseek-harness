@@ -43,6 +43,14 @@ class TestSwitcher:
         markdown = "# Title\n\nEnglish | [中文](guide.zh.md)\n"
         assert pairing_links.language_switcher_line(markdown, ["guide.zh.md"]) == 2
 
+    def test_accepts_the_precise_zh_hans_label_on_the_zh_side(self) -> None:
+        markdown = "# 标题\n\n[English](guide.md) | 简体中文\n"
+        assert pairing_links.language_switcher_line(markdown, ["guide.md"]) == 2
+
+    def test_accepts_the_precise_zh_hans_label_on_the_english_side(self) -> None:
+        markdown = "# Title\n\nEnglish | [简体中文](guide.zh.md)\n"
+        assert pairing_links.language_switcher_line(markdown, ["guide.zh.md"]) == 2
+
     def test_rejects_wrong_target(self) -> None:
         markdown = "# T\n\nEnglish | [中文](other.md)\n"
         assert pairing_links.language_switcher_line(markdown, ["guide.zh.md"]) is None
