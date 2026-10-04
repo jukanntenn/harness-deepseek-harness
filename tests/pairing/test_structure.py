@@ -57,16 +57,19 @@ class TestPartitionGeneratedRegions:
 
 
 class TestStructureDiff:
-    def test_diff_reports_first_divergence_per_field(self) -> None:
+    def test_diff_reports_one_field_message_per_diverging_index(self) -> None:
         source = StructureSignature(
-            headings=[1, 2], code=[], tables=[], lists=["bullet:items=2"], links=["a"]
+            headings=[1, 2], code=[], tables=[], lists=["bullet:items=2"], links=["a", "b", "c"]
         )
-        zh = StructureSignature(headings=[1, 3], code=[], tables=[], lists=[], links=[])
+        zh = StructureSignature(
+            headings=[1, 3], code=[], tables=[], lists=[], links=["a", "z", "q"]
+        )
         diff = structure_diff(source, zh)
-        assert len(diff) == 3
+        assert len(diff) == 4
         assert "heading (depth) #2" in diff[0]
         assert "list (kind, start, item count) #1" in diff[1]
-        assert "link target #1" in diff[2]
+        assert "link target #2" in diff[2]
+        assert "link target #3" in diff[3]
 
     def test_equal_signatures_diff_empty(self) -> None:
         sig = StructureSignature(
@@ -161,6 +164,36 @@ class TestSignatureLinkSemantics:
         assert english.links == ["../specs/design.md#s"]
         assert chinese.links == ["../specs/design.md#s"]
         assert structure_diff(english, chinese) == []
+
+    def test_pending_zh_sibling_compares_at_the_pair_anchor(self) -> None:
+        def pending_context(source: str, markdown: str) -> LinkContext:
+            return LinkContext(
+                repo_root=".",
+                source_path=source,
+                is_pair_source=lambda p: p == "docs/other.md",
+                repository_file_exists=lambda p: p == "docs/other.md",
+                markdown=markdown,
+            )
+
+        english = pending_context("docs/x.md", "[Other](other.md)\n")
+        chinese = pending_context("docs/x.zh.md", "[Other](other.zh.md)\n")
+        en_signature = structure_signature(parse_markdown(english.markdown), [], english)
+        zh_signature = structure_signature(parse_markdown(chinese.markdown), [], chinese)
+        assert en_signature.links == ["hdsh-pairing-target:docs/other.md"]
+        assert zh_signature.links == ["hdsh-pairing-target:docs/other.md"]
+        assert structure_diff(en_signature, zh_signature) == []
+
+    def test_english_side_linking_the_zh_spelling_of_a_pending_pair_stays_bare(self) -> None:
+        markdown = "[Other](other.zh.md)\n"
+        context = LinkContext(
+            repo_root=".",
+            source_path="docs/x.md",
+            is_pair_source=lambda p: p == "docs/other.md",
+            repository_file_exists=lambda p: p == "docs/other.md",
+            markdown=markdown,
+        )
+        signature = structure_signature(parse_markdown(markdown), [], context)
+        assert signature.links == ["other.md"]
 
     def test_angle_autolink_enters_the_signature(self) -> None:
         markdown = "<https://example.com/reference.md>\n"

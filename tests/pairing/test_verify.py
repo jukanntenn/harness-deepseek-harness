@@ -166,6 +166,27 @@ class TestCorpusCheck:
         assert code == 1
         assert any("out of sync" in line for line in err)
 
+    def test_hash_drift_no_longer_hides_the_structure_divergence(self, repo: Repo) -> None:
+        write_pair(repo, "docs/guide.md")
+        record(repo, "docs/guide.md")
+        repo.write("docs/guide.md", EN_PAIR.replace("- two\n", ""))
+        code, _, err = run(repo, "verify")
+        assert code == 1
+        assert any("out of sync" in line for line in err)
+        assert any("list (kind, start, item count) #1" in line for line in err)
+
+    def test_a_recorded_pair_linking_an_unlanded_sibling_stays_green(self, repo: Repo) -> None:
+        repo.write("docs/other.md", "# Other\n\nEnglish-only counterpart.\n")
+        write_pair(
+            repo,
+            "docs/guide.md",
+            source=lambda target: en_pair(target) + "\nSee [other](other.md).\n",
+            zh=lambda target: zh_pair(target) + "\n见 [other](other.zh.md)。\n",
+        )
+        record(repo, "docs/guide.md")
+        code, _, err = run(repo, "verify", "docs/guide.md")
+        assert code == 0, err
+
     def test_malformed_record(self, repo: Repo) -> None:
         write_pair(repo, "docs/guide.md")
         repo.write("docs/guide.i18n.yaml", "guide.md: nothex\n")

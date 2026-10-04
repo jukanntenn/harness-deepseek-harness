@@ -47,6 +47,25 @@ def pairing_check(root: Path) -> int:
     return run_gate(verify_request(argparse.Namespace(cached=False, anchors=[])), str(root))
 
 
+def wire_ci_gates(repo: Repo) -> None:
+    """Give the consumer repository a CI workflow that runs the gates.
+
+    Apply installs only the policy workflows; wiring the gates into CI is the
+    consumer's own step, so tests asserting a green verify wire it first.
+    """
+    (repo.root / ".github" / "workflows" / "gates.yml").write_text(
+        "name: gates\n"
+        "on: [push]\n"
+        "jobs:\n"
+        "  gates:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "      - run: prek run --all-files\n",
+        encoding="utf-8",
+    )
+
+
 class TestPlan:
     def test_plan_writes_nothing_and_lists_the_installation(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
@@ -140,6 +159,58 @@ class TestApplyRoundTrip:
             "docs/development.zh.md",
         ]
         assert pairing_check(consumer.root) == 0
+
+    def test_a_pre_existing_english_document_defers_its_whole_pair(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / "docs").mkdir(exist_ok=True)
+        (consumer.root / "docs" / "development.md").write_text(
+            "# Development\n\nReal consumer content.\n", encoding="utf-8"
+        )
+        commit_all(consumer)
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert (
+            "docs/development.md: a pre-existing document was left untouched together "
+            "with its counterpart and its pair record" in output
+        )
+        assert not (consumer.root / "docs" / "development.zh.md").exists()
+        assert not (consumer.root / "docs" / "development.i18n.yaml").exists()
+        assert "recorded 12 pair(s)" in output
+        assert "1 still need a Chinese counterpart and a record" in output
+        manifest = json.loads(
+            (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
+        )
+        assert "docs/development.md" not in manifest["editable"]
+        assert "docs/development.zh.md" not in manifest["editable"]
+
+    def test_a_pre_existing_chinese_document_defers_its_whole_pair(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / "docs").mkdir(exist_ok=True)
+        (consumer.root / "docs" / "architecture.zh.md").write_text(
+            "# 架构\n\n真实内容。\n", encoding="utf-8"
+        )
+        commit_all(consumer)
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert (
+            "docs/architecture.md: a pre-existing document was left untouched together "
+            "with its counterpart and its pair record" in output
+        )
+        assert not (consumer.root / "docs" / "architecture.md").exists()
+        assert not (consumer.root / "docs" / "architecture.i18n.yaml").exists()
+        assert "recorded 12 pair(s)" in output
+
+    def test_an_adopt_installed_template_pair_still_records_on_reapply(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopted")
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert "recorded 13 pair(s)" in output
+        assert (consumer.root / "docs" / "development.i18n.yaml").is_file()
 
     def test_organization_flavor_renders_app_credentials(self, consumer: Repo) -> None:
         assert apply_cli(*adopt_arguments("--account-type", "organization")) == 0
@@ -260,6 +331,7 @@ class TestConsumerConfigOwnership:
         assert ".hdsh/docs.manifest.json" not in manifest["files"]
         assert ".github/issue-management/config.json" not in manifest["files"]
         assert ".hdsh/pairing.manifest.json" in manifest["consumerConfig"]
+        wire_ci_gates(consumer)
         capsys.readouterr()
         assert verify_cli() == 1  # placeholders remain, but no drift
         error = capsys.readouterr().err
@@ -585,6 +657,7 @@ class TestVerify:
     ) -> None:
         assert apply_cli(*adopt_arguments()) == 0
         commit_all(consumer, "adopt hdsh")
+        wire_ci_gates(consumer)
         capsys.readouterr()
         assert verify_cli() == 1
         output = capsys.readouterr().out
@@ -645,6 +718,7 @@ class TestVerify:
             "# ours\n\n## Conventions\n\nOurs.\n\n## Run relevant checks locally\n\nOurs.\n",
             encoding="utf-8",
         )
+        wire_ci_gates(consumer)
         capsys.readouterr()
         assert verify_cli() == 0, capsys.readouterr().out
         assert "manual merge pending" not in capsys.readouterr().out
@@ -721,9 +795,96 @@ class TestWorkflowGroupDrift:
         assert adopt_commands._workflow_group_drift(str(tmp_path)) == []
 
 
+class TestCiGateDrift:
+    def test_a_freshly_adopted_ci_without_any_gate_is_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        error = capsys.readouterr().err
+        assert "CI runs no hdsh gate" in error
+        assert "prek run --all-files" in error
+
+    def test_a_pinned_hdsh_install_counts_as_wiring(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        (consumer.root / ".github" / "workflows" / "gates.yml").write_text(
+            "on: [push]\njobs:\n  gates:\n    runs-on: ubuntu-latest\n    steps:\n"
+            "      - run: uv tool install hdsh && hdsh pairing verify\n",
+            encoding="utf-8",
+        )
+        capsys.readouterr()
+        assert verify_cli() == 1  # placeholders remain
+        assert "CI runs no hdsh gate" not in capsys.readouterr().err
+
+    def test_policy_workflow_input_names_do_not_count_as_gates(self, tmp_path: Path) -> None:
+        workflows = tmp_path / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "issue-policy.yml").write_text(
+            "on: [issues]\njobs:\n  policy:\n    steps:\n      - uses: o/r/a@v1\n"
+            "        with:\n          hdsh-ref: v0.1.0\n",
+            encoding="utf-8",
+        )
+        drift = adopt_commands._ci_gate_drift(str(tmp_path))
+        assert len(drift) == 1
+        assert "CI runs no hdsh gate" in drift[0]
+
+    def test_a_repository_without_workflows_is_not_drift(self, tmp_path: Path) -> None:
+        assert adopt_commands._ci_gate_drift(str(tmp_path)) == []
+
+    def test_a_repository_with_no_workflows_gets_an_informational_line(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        for workflow in (consumer.root / ".github" / "workflows").iterdir():
+            workflow.unlink()
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert "no CI workflows found; the gates run only locally" in capsys.readouterr().out
+
+
 class TestPairingSizingNote:
     def test_without_any_manifest_there_is_no_note(self, tmp_path: Path) -> None:
         assert adopt_commands._pairing_sizing_note(str(tmp_path), [], []) is None
+
+    def test_a_hard_wrapped_pre_existing_corpus_is_sized_before_apply(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        readme = consumer.root / "README.md"
+        readme.write_text(
+            "# consumer\n\nEnglish | [中文](README.zh.md)\n\nA hard-wrapped\nparagraph.\n",
+            encoding="utf-8",
+        )
+        commit_all(consumer, "wrap legacy prose")
+        assert plan_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert (
+            "wrap gate after apply: 1 hard-wrapped paragraph(s) across 1 pre-existing "
+            "file(s) must reflow to one physical line per paragraph" in output
+        )
+
+    def test_a_reflowed_corpus_gets_no_wrap_note(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert plan_cli(*adopt_arguments()) == 0
+        assert "wrap gate after apply" not in capsys.readouterr().out
+
+    def test_without_any_docs_manifest_there_is_no_note(self, tmp_path: Path) -> None:
+        assert adopt_commands._wrap_sizing_note(str(tmp_path), []) is None
+
+    def test_a_malformed_pre_existing_docs_manifest_yields_no_note(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / ".hdsh").mkdir()
+        (consumer.root / ".hdsh" / "docs.manifest.json").write_text("{ nope", encoding="utf-8")
+        commit_all(consumer, "broken docs manifest")
+        assert plan_cli(*adopt_arguments()) == 0
+        assert "wrap gate after apply" not in capsys.readouterr().out
 
 
 class TestInvocationDrift:

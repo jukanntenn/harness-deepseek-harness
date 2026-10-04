@@ -95,9 +95,39 @@ class TestResolveLifecycleActor:
         resolution = wizard.resolve_lifecycle_actor(None, results)
         assert (resolution.value, resolution.source) == ("operator", wizard.DERIVED)
 
-    def test_an_unauthenticated_gh_fails_loud(self) -> None:
-        with pytest.raises(wizard.WizardError, match="not authenticated"):
+    def test_a_rejected_credential_fails_loud_as_unauthenticated(self) -> None:
+        rejected = {
+            "gh api user --jq .login": subprocess.CompletedProcess(
+                ["gh", "api", "user", "--jq", ".login"],
+                1,
+                stdout="",
+                stderr="gh: To use GitHub CLI, please run: gh auth login\n",
+            )
+        }
+        with pytest.raises(wizard.WizardError, match="gh is not authenticated"):
+            wizard.resolve_lifecycle_actor(None, rejected)
+
+    def test_a_probe_failure_keeps_the_exit_status_and_stderr(self) -> None:
+        with pytest.raises(wizard.WizardError, match=r"exited 1: boom.*rerun if transient"):
             wizard.resolve_lifecycle_actor(None, failing("gh api user --jq .login"))
+
+    def test_a_probe_failure_never_claims_a_missing_credential(self) -> None:
+        with pytest.raises(wizard.WizardError) as raised:
+            wizard.resolve_lifecycle_actor(None, failing("gh api user --jq .login"))
+        assert "not authenticated" not in str(raised.value)
+
+    def test_an_absent_gh_names_the_install_remedy(self) -> None:
+        with pytest.raises(wizard.WizardError, match="gh is not runnable on PATH"):
+            wizard.resolve_lifecycle_actor(None, {})
+
+    def test_an_empty_login_fails_loud(self) -> None:
+        empty = {
+            "gh api user --jq .login": subprocess.CompletedProcess(
+                ["gh", "api", "user", "--jq", ".login"], 0, stdout="\n", stderr=""
+            )
+        }
+        with pytest.raises(wizard.WizardError, match="empty login"):
+            wizard.resolve_lifecycle_actor(None, empty)
 
 
 class TestResolveTimeZone:
@@ -133,6 +163,15 @@ class TestRealTransport:
 
         monkeypatch.setattr(wizard.subprocess, "run", fake_run)
         assert wizard._run(["git", "--version"], None) is completed
+
+    def test_an_absent_executable_answers_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def absent_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            raise FileNotFoundError("gh")
+
+        monkeypatch.setattr(wizard.subprocess, "run", absent_run)
+        completed = wizard._run(["gh", "api", "user"], None)
+        assert completed.returncode == wizard._COMMAND_NOT_FOUND
+        assert completed.stderr == "command not found"
 
     def test_the_local_timezone_oserror_path_fails_loud(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -196,9 +235,40 @@ class TestPreflight:
         failures = wizard.preflight({})
         assert len(failures) == 4
         assert any("git is not runnable" in line for line in failures)
-        assert any("gh is not authenticated" in line for line in failures)
+        assert any("gh is not runnable" in line for line in failures)
         assert any("bare hdsh is not runnable" in line for line in failures)
         assert any("ripgrep is not runnable" in line for line in failures)
+
+    def test_a_rejected_credential_still_names_the_login_remedy(self) -> None:
+        rejected = {
+            **{key: value for key, value in self.READY.items() if key != "gh auth status"},
+            "gh auth status": subprocess.CompletedProcess(
+                ["gh", "auth", "status"],
+                1,
+                stdout="",
+                stderr="You are not logged into any GitHub hosts. Run gh auth login.\n",
+            ),
+        }
+        failures = wizard.preflight(rejected)
+        assert failures == ["gh is not authenticated; run gh auth login"]
+
+    def test_a_preflight_probe_failure_is_never_read_as_a_missing_credential(self) -> None:
+        unreachable = {
+            **{key: value for key, value in self.READY.items() if key != "gh auth status"},
+            "gh auth status": subprocess.CompletedProcess(
+                ["gh", "auth", "status"],
+                1,
+                stdout="",
+                stderr="gh: error connecting to api.github.com:\n    dial tcp: no route\n",
+            ),
+        }
+        failures = wizard.preflight(unreachable)
+        assert failures == [
+            (
+                "the gh probe failed (gh auth status exited 1: gh: error connecting to "
+                "api.github.com:); rerun if transient"
+            )
+        ]
 
     def test_the_hdsh_remediation_names_the_git_install_form(self) -> None:
         failures = wizard.preflight(

@@ -276,14 +276,14 @@ def _show(value: str | int | None) -> str:
 
 
 def structure_diff(source: StructureSignature, zh: StructureSignature) -> list[str]:
-    """Return the first divergence for each structural field; empty means equal.
+    """Return every diverging index for each structural field; empty means equal.
 
     Args:
         source: The English side's signature.
         zh: The Chinese side's signature.
 
     Returns:
-        One human-readable divergence per differing field.
+        One human-readable divergence per mismatching index per field.
     """
     out: list[str] = []
     fields: list[tuple[str, list[str] | list[int], list[str] | list[int]]] = [
@@ -304,5 +304,4 @@ def structure_diff(source: StructureSignature, zh: StructureSignature) -> list[s
                     f"{field_name} #{index + 1} diverges between the pair: "
                     f"{_show(source_value)} vs {_show(zh_value)}"
                 )
-                break
     return out

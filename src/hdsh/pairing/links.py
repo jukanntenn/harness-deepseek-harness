@@ -3,7 +3,10 @@
 The pairing gate compares link targets semantically: a relative link into the
 active bilingual corpus resolves to a locale-independent pair anchor, so the
 English side's ``foo.md`` and the Chinese side's ``foo.zh.md`` compare equal.
-Links are collected from the parsed Markdown token stream plus a scanner over
+A Chinese-side link to a counterpart whose translation has not landed yet
+resolves through to the English source, so one finished pair stays consistent
+while the corpus around it is still being translated. Links are collected
+from the parsed Markdown token stream plus a scanner over
 each inline chunk, never from raw regex over the whole document, so fenced and
 inline code is never mistaken for a link. Every destination is carried in two
 forms — the destination the parser resolved and the bytes exactly as authored
@@ -142,6 +145,9 @@ class _ResolvedLink:
     expected_path: str
     expected_url: str
     locale: str
+    #: True when the authored Chinese side is absent and the link resolved
+    #: through to the English source — the target pair has not landed yet.
+    pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -239,6 +245,34 @@ def _resolve_repository_target(raw_path: str, context: LinkContext) -> str | Non
     return exact if context.repository_file_exists(exact) else None
 
 
+def _pending_pair_source(raw_path: str, context: LinkContext) -> str | None:
+    """Resolve a Chinese-side link whose target pair has not landed yet.
+
+    Args:
+        raw_path: The parsed relative destination, expected to end ``.zh.md``.
+        context: Repository and source context.
+
+    Returns:
+        The repository-relative English source whose Chinese side is absent
+        from the content plane, or ``None`` when the destination names no
+        active corpus pair. Only Chinese-side sources qualify: an English
+        side that misuses the ``.zh.md`` spelling stays unresolved.
+    """
+    if not context.source_path.endswith(".zh.md"):
+        return None
+    decoded = _decode_path(raw_path)
+    if not decoded.endswith(".zh.md"):
+        return None
+    joined = posixpath.join(posixpath.dirname(context.source_path), decoded)
+    pending = _repository_relative_path(joined)
+    if pending is None:
+        return None
+    source = pending[: -len(".zh.md")] + ".md"
+    if not context.repository_file_exists(source):
+        return None
+    return source if context.is_pair_source(source) else None
+
+
 def _pair_target(target_path: str, context: LinkContext) -> tuple[str, str] | None:
     if target_path.endswith(".zh.md"):
         source = target_path[: -len(".zh.md")] + ".md"
@@ -281,8 +315,12 @@ def _resolve_link(url: str, context: LinkContext, authored_url: str) -> _Resolve
     if path == "":
         return None
     target_path = _resolve_repository_target(path, context)
+    pending = False
     if target_path is None:
-        return None
+        target_path = _pending_pair_source(path, context)
+        if target_path is None:
+            return None
+        pending = True
     pair = _pair_target(target_path, context)
     if pair is None:
         return None
@@ -299,6 +337,7 @@ def _resolve_link(url: str, context: LinkContext, authored_url: str) -> _Resolve
             _expected_locale_path(authored_path, locale, context, expected_path) + authored_suffix
         ),
         locale=locale,
+        pending=pending,
     )
 
 
@@ -1196,7 +1235,7 @@ def link_locale_violations(
         if is_external_or_absolute_markdown_url(link.href):
             continue
         resolved = _resolve_link(link.href, context, link.authored)
-        if resolved is None or resolved.target_path == resolved.expected_path:
+        if resolved is None or resolved.pending or resolved.target_path == resolved.expected_path:
             continue
         report_line = link.definition_line if link.definition_line is not None else link.line
         violations.append(

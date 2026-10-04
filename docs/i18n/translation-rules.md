@@ -44,6 +44,7 @@ These rules govern the Chinese side; the English side follows the repo's normal 
 
 - MUST put one half-width space between Chinese text and Latin words, and between Chinese text and numerals: `每次提交运行 3 个 prek 钩子`。No space between a full-width punctuation mark and anything.
 - MUST use full-width (Chinese) punctuation in Chinese prose: `，。：；？！（）「」`. Half-width punctuation stays inside code spans, inside complete English sentences quoted as-is, and in numbers (`3.5`, `1,024`).
+- A bare URL and a `[label]: url` reference definition MUST NOT sit directly before full-width punctuation or CJK text: literal autolinks trim only ASCII trailing punctuation and reference destinations trim nothing, so the full-width character and the prose after it are swallowed into the destination — on GitHub and in the pairing signature alike. Bracket the link (`[text](url)`), use the angle form (`<url>`), or leave one half-width space after the URL.
 - Chinese prose *SHOULD* prefer colons, periods, commas, or parentheses over em dashes. Keep an em dash only when no other punctuation preserves the sentence naturally.
 - Enumeration commas: a Chinese list of parallel items uses 顿号（、）, not commas.
 - MUST NOT use full-width digits or full-width Latin letters — `１２３` never, `123` always.
