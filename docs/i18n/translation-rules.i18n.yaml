@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record docs/i18n/translation-rules.md
-translation-rules.md: 87983a3d8f30e48c9f80e3307144b4e9fba84a83
-translation-rules.zh.md: 9f368c2e02bacab88a12bffd7f02e01f6ebfc48b
+translation-rules.md: a09b49472e304989b371ecf55f93808181af6d48
+translation-rules.zh.md: fc375e55d196b3428295a892831aca9b446b089d

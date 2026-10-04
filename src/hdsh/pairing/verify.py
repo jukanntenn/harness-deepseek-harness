@@ -577,8 +577,9 @@ def _check_pair(
             )
             consistent = False
     if not consistent:
+        # Hash drift no longer hides the consistency findings: the update
+        # loop needs them mid-edit, before the re-record.
         state[source] = "out-of-sync"
-        return
 
     source_text = source_content.decode("utf-8")
     zh_text = zh_content.decode("utf-8")

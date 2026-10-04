@@ -34,8 +34,9 @@ from hdsh.adopt.manifest import (
     load_manifest,
     save_manifest,
 )
-from hdsh.docs.config import parse_docs_manifest
-from hdsh.docs.markdown import document_anchors
+from hdsh.docs.config import effective_scope, parse_docs_manifest
+from hdsh.docs.corpus import discover_corpus_files
+from hdsh.docs.markdown import document_anchors, hard_wrapped_paragraphs
 from hdsh.pairing import verify as pairing_verify
 from hdsh.pairing.corpus import corpus_file_predicate
 from hdsh.pairing.manifest import parse_manifest as parse_pairing_manifest
@@ -532,7 +533,21 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
         writes.extend(_pair_writes(anchor, installed, parameters.hdsh_ref))
         records.append(anchor)
 
+    previous = _load_previous_manifest(root, blockers)
+    consumer_owned: set[str] = set()
+    for anchor in corpus.TEMPLATE_PAIRS:
+        sides = (anchor, f"{anchor[: -len('.md')]}.zh.md")
+        if _consumer_owned_template_pair(root, sides, previous):
+            consumer_owned.update(sides)
+            notes.append(
+                f"{anchor}: a pre-existing document was left untouched together with "
+                "its counterpart and its pair record — translate the counterpart from "
+                "the real content, then hdsh pairing record after review"
+            )
+
     for template, dest in corpus.TEMPLATE_FILES:
+        if dest in consumer_owned:
+            continue
         rendered = corpus.map_invocations(
             corpus.render_tokens(
                 (_TEMPLATES_ROOT / template).read_text(encoding="utf-8"), parameters, today
@@ -542,7 +557,6 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
         if dest in corpus.TEMPLATE_PAIRS:
             records.append(dest)
 
-    previous = _load_previous_manifest(root, blockers)
     slot_guidance = _plan_slot_templates(root, writes, notes, blockers, previous)
 
     adopt_anchor = corpus.ADOPT_RFC_ANCHOR.format(date=today)
@@ -584,9 +598,17 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
     sizing = _pairing_sizing_note(root, writes, records)
     if sizing is not None:
         notes.append(sizing)
+    wrap_sizing = _wrap_sizing_note(root, writes)
+    if wrap_sizing is not None:
+        notes.append(wrap_sizing)
     notes.append(
         "the managed prek hooks carry group 'hdsh'; a CI that filters prek with "
         "--group must include it"
+    )
+    notes.append(
+        "a CI that runs no prek wires the gates itself: prek run --all-files, or "
+        "a pinned hdsh install plus the managed gate commands — adopt verify "
+        "flags a gate-less CI"
     )
     return AdoptionPlan(
         parameters=parameters,
@@ -744,6 +766,56 @@ def _pairing_sizing_note(root: str, writes: list[PlannedWrite], records: list[st
     )
 
 
+def _wrap_sizing_note(root: str, writes: list[PlannedWrite]) -> str | None:
+    """Count the reflow work the wrap gate will demand of the pre-existing corpus.
+
+    The wrap rule covers every in-scope document, and an adopted scope cannot
+    shrink — a consumer corpus that hard-wraps prose must reflow once, after
+    apply. The count exists so that cost is budgeted as one mechanical commit
+    instead of discovered as a wall of red after apply.
+
+    Args:
+        root: Consumer repository root.
+        writes: The final planned writes; their destinations are skipped
+            because adoption renders its own bytes already reflowed.
+
+    Returns:
+        The sizing note, or ``None`` when no readable docs manifest exists or
+        nothing in the pre-existing corpus is hard-wrapped.
+    """
+    manifest_write = next(
+        (write for write in writes if write.dest == ".hdsh/docs.manifest.json"), None
+    )
+    if manifest_write is not None:
+        text = manifest_write.content.decode("utf-8")
+    else:
+        path = Path(root, ".hdsh/docs.manifest.json")
+        if not path.exists():
+            return None
+        text = path.read_text(encoding="utf-8")
+    try:
+        manifest = parse_docs_manifest(text)
+    except (TypeError, ValueError):
+        return None
+    planned = {write.dest for write in writes}
+    paragraphs = 0
+    documents = 0
+    for file in discover_corpus_files(Path(root), effective_scope(manifest.markdown_wrap)):
+        if file.path in planned:
+            continue
+        wrapped = list(hard_wrapped_paragraphs(file.abs_path.read_text(encoding="utf-8")))
+        if wrapped:
+            paragraphs += len(wrapped)
+            documents += 1
+    if not paragraphs:
+        return None
+    return (
+        f"wrap gate after apply: {paragraphs} hard-wrapped paragraph(s) across "
+        f"{documents} pre-existing file(s) must reflow to one physical line per "
+        "paragraph — budget one mechanical reflow commit"
+    )
+
+
 def _load_previous_manifest(root: str, blockers: list[Blocker]) -> AdoptManifest | None:
     """Load a previous adoption's manifest, if any, for slot baselines.
 
@@ -767,6 +839,26 @@ def _load_previous_manifest(root: str, blockers: list[Blocker]) -> AdoptManifest
             )
         )
         return None
+
+
+def _consumer_owned_template_pair(
+    root: str, sides: tuple[str, str], previous: AdoptManifest | None
+) -> bool:
+    """Whether a template pair collides with documents adoption never wrote.
+
+    Args:
+        root: Consumer repository root.
+        sides: The pair's English and Chinese destinations.
+        previous: The previous adoption's manifest, or ``None`` fresh.
+
+    Returns:
+        True when either side exists on disk without a previous adoption
+        having installed it — consumer-authored content that a fresh
+        counterpart template and a consistency record would immediately
+        contradict.
+    """
+    installed = set(previous.editable) if previous is not None else set()
+    return any(Path(root, side).exists() and side not in installed for side in sides)
 
 
 def _plan_slot_templates(
@@ -1176,6 +1268,24 @@ def _consumer_config_drift(root: str, manifest: AdoptManifest) -> list[str]:
 
 
 _PREK_GROUP = re.compile(r"--group(?:[= ])(\S+)")
+#: One CI line that runs the gates: prek's runner, or a bare hdsh command.
+#: Workflow input names like ``hdsh-ref:`` name the tool without invoking it.
+_GATE_INVOCATION = re.compile(r"\b(?:prek run|hdsh \w)")
+
+
+def _workflow_files(root: str) -> list[Path]:
+    """List every CI workflow file, empty when the repository has none.
+
+    Args:
+        root: Consumer repository root.
+
+    Returns:
+        The sorted ``.github/workflows`` YAML paths.
+    """
+    workflows = Path(root, ".github", "workflows")
+    if not workflows.is_dir():
+        return []
+    return sorted({*workflows.glob("*.yml"), *workflows.glob("*.yaml")})
 
 
 def _workflow_group_drift(root: str) -> list[str]:
@@ -1193,11 +1303,7 @@ def _workflow_group_drift(root: str) -> list[str]:
         Drift entries naming each offending workflow line.
     """
     drift: list[str] = []
-    workflows = Path(root, ".github", "workflows")
-    if not workflows.is_dir():
-        return drift
-    paths = sorted({*workflows.glob("*.yml"), *workflows.glob("*.yaml")})
-    for path in paths:
+    for path in _workflow_files(root):
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             command = line.split("#", 1)[0]
             if "prek run" not in command or "--group" not in command:
@@ -1209,6 +1315,37 @@ def _workflow_group_drift(root: str) -> list[str]:
                     "managed gate silently drops out of this command"
                 )
     return drift
+
+
+def _ci_gate_drift(root: str) -> list[str]:
+    """Flag CI workflows that never run an hdsh gate.
+
+    A repository whose CI invokes neither prek nor hdsh enforces nothing
+    server-side: the gates run only on machines that installed the worktree
+    hooks. Any workflow line naming either tool passes the check — including
+    the pinned-install form ``uv tool install … && hdsh pairing verify …``.
+
+    Args:
+        root: Consumer repository root.
+
+    Returns:
+        One drift entry naming the wiring gap, or empty when the repository
+        has no CI at all (a posture choice, not drift).
+    """
+    paths = _workflow_files(root)
+    if not paths:
+        return []
+    for path in paths:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if _GATE_INVOCATION.search(line.split("#", 1)[0]):
+                return []
+    return [
+        (
+            "CI runs no hdsh gate; wire `prek run --all-files` (with --group hdsh when "
+            "filtered) or a pinned hdsh install plus the managed gate commands — "
+            "until then the gates run only locally"
+        )
+    ]
 
 
 def _invocation_drift(root: str, sources: tuple[str, ...]) -> list[str]:
@@ -1256,6 +1393,9 @@ def verify_main(args: argparse.Namespace) -> int:
         return 1
     drift: list[str] = _consumer_config_drift(root, manifest)
     drift.extend(_workflow_group_drift(root))
+    drift.extend(_ci_gate_drift(root))
+    if not _workflow_files(root):
+        print(f"{TOOL}: no CI workflows found; the gates run only locally until CI wires them")
     placeholders: list[str] = []
     pending: list[str] = []
     sources = tuple(

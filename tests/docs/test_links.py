@@ -73,6 +73,15 @@ class TestLinkViolations:
             ("missing.md#anything", "target")
         ]
 
+    def test_unlanded_zh_side_of_an_existing_pair_passes(self, repo: Repo) -> None:
+        repo.write("docs/other.md", "# Other\n")
+        assert self.violations(repo, "# A\n\n[other](other.zh.md)\n") == []
+
+    def test_unlanded_zh_side_without_an_english_sibling_stays_broken(self, repo: Repo) -> None:
+        assert self.violations(repo, "# A\n\n[ghost](missing.zh.md)\n") == [
+            ("missing.zh.md", "target")
+        ]
+
     def test_percent_encoded_target_resolves_and_broken_escape_fails(self, repo: Repo) -> None:
         repo.write("docs/My File.md", "# Encoded\n")
         assert self.violations(repo, "# A\n\n[ok](My%20File.md)\n") == []

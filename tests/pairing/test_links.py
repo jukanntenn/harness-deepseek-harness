@@ -219,6 +219,49 @@ class TestLocaleViolations:
         )
         assert [(v.url, v.expected_url) for v in violations] == [("unpaired.md", "unpaired.zh.md")]
 
+    def test_zh_link_to_an_unlanded_zh_sibling_is_pending_not_wrong_locale(self) -> None:
+        exists = {"docs/guide.zh.md", "docs/unpaired.md"}
+        markdown = "See [missing](unpaired.zh.md?view=full#overview).\n"
+        assert (
+            pairing_links.link_locale_violations(
+                markdown,
+                _context(
+                    "docs/guide.zh.md", exists, corpus={"docs/unpaired.md"}, markdown=markdown
+                ),
+            )
+            == []
+        )
+
+    def test_zh_link_to_a_zh_sibling_without_an_english_side_stays_ignored(self) -> None:
+        markdown = "See [gone](gone.zh.md).\n"
+        assert (
+            pairing_links.link_locale_violations(
+                markdown,
+                _context("docs/guide.zh.md", set(), corpus={"docs/gone.md"}, markdown=markdown),
+            )
+            == []
+        )
+
+    def test_zh_link_escaping_the_repository_stays_ignored(self) -> None:
+        markdown = "See [gone](../../outside.zh.md).\n"
+        assert (
+            pairing_links.link_locale_violations(
+                markdown, _context("docs/guide.zh.md", set(), markdown=markdown)
+            )
+            == []
+        )
+
+    def test_en_link_to_an_unlanded_zh_sibling_stays_unresolved(self) -> None:
+        exists = {"docs/guide.md", "docs/unpaired.md"}
+        markdown = "See [missing](unpaired.zh.md).\n"
+        assert (
+            pairing_links.link_locale_violations(
+                markdown,
+                _context("docs/guide.md", exists, corpus={"docs/unpaired.md"}, markdown=markdown),
+            )
+            == []
+        )
+
     def test_directory_target_does_not_infer_an_index_page(self) -> None:
         exists = {"docs/guide.zh.md", "docs/section/index.md", "docs/section/index.zh.md"}
         markdown = "See [section](section/).\n"
@@ -937,6 +980,24 @@ class TestNormalize:
             english, self._pair_context(english, "docs/guide.md")
         ) == pairing_links.normalize_translation_markdown_links(
             chinese, self._pair_context(chinese, "docs/guide.zh.md")
+        )
+
+    def test_an_unlanded_zh_sibling_normalizes_to_the_english_anchor(self) -> None:
+        def pending(markdown: str, source: str) -> LinkContext:
+            return LinkContext(
+                repo_root=".",
+                source_path=source,
+                is_pair_source=lambda path: path == "docs/other.md",
+                repository_file_exists=lambda path: path == "docs/other.md",
+                markdown=markdown,
+            )
+
+        english = "# T\n\nSee [x](other.md).\n"
+        chinese = "# T\n\nSee [x](other.zh.md).\n"
+        assert pairing_links.normalize_translation_markdown_links(
+            english, pending(english, "docs/guide.md")
+        ) == pairing_links.normalize_translation_markdown_links(
+            chinese, pending(chinese, "docs/guide.zh.md")
         )
 
     def test_authored_query_bytes_prevent_false_equality(self) -> None:

@@ -3,8 +3,9 @@
 The target file must exist AND a ``#fragment`` onto a Markdown target —
 including a same-file ``#anchor`` — must name a real heading slug or explicit
 ``<a id>``. URL and root-absolute targets are excluded; query strings do not
-affect resolution against the source file. The checker never rewrites;
-symlinked instruction files are deduped.
+affect resolution against the source file. A missing ``.zh.md`` target whose
+English sibling exists is an unlanded translation, not a broken target, and
+passes. The checker never rewrites; symlinked instruction files are deduped.
 """
 
 from __future__ import annotations
@@ -106,6 +107,8 @@ def find_violations(
         target = path_part(url)
         resolved = file.abs_path if target == "" else file.abs_path.parent / target
         if not resolved.exists():
+            if _pending_translation_target(file.abs_path.parent, target):
+                continue
             out.append(BrokenLinkViolation(file.path, destination.line, url, "target"))
             continue
         fragment = fragment_part(url)
@@ -114,6 +117,22 @@ def find_violations(
         if fragment not in anchors_of.anchors(resolved):
             out.append(BrokenLinkViolation(file.path, destination.line, url, "anchor"))
     return out
+
+
+def _pending_translation_target(parent: Path, target: str) -> bool:
+    """Whether a missing ``.zh.md`` target is the unlanded side of an existing pair.
+
+    Args:
+        parent: Directory of the linking document.
+        target: The relative target path as authored.
+
+    Returns:
+        True when the target names a Chinese side whose English sibling
+        exists — the link points at a pair whose translation has not landed.
+    """
+    if not target.endswith(".zh.md"):
+        return False
+    return (parent / f"{target[: -len('.zh.md')]}.md").exists()
 
 
 def run(root: Path) -> int:

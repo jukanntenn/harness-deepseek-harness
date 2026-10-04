@@ -34,6 +34,19 @@ DEFAULT = "default"
 _VERSION_TAG = re.compile(r"refs/tags/v(\d+)\.(\d+)\.(\d+)$")
 _LOCAL_TIMEZONE_LINK = "/etc/localtime"
 
+#: gh's own wording for credential rejections; a failure carrying none of
+#: these markers keeps its exit status and stderr instead of being read as
+#: a missing credential.
+_UNAUTHENTICATED_MARKERS: tuple[str, ...] = (
+    "gh auth login",
+    "http 401",
+    "bad credentials",
+    "not logged in",
+)
+
+#: The shell's exit-status convention for a command absent from PATH.
+_COMMAND_NOT_FOUND = 127
+
 
 class WizardError(ValueError):
     """One derivation, binding, or preflight step cannot proceed."""
@@ -58,14 +71,46 @@ def _run(command: list[str], transport: Transport | None) -> subprocess.Complete
     """Run one probe command, or answer from the injected transport.
 
     A command missing from the transport is a failing probe: the hermetic
-    suite models an absent tool by omitting it.
+    suite models an absent tool by omitting it. A command absent from PATH
+    answers with the shell's not-found status instead of raising, so every
+    caller classifies both absence forms alike.
     """
     if transport is not None:
         key = " ".join(command)
         if key not in transport:
-            return subprocess.CompletedProcess(command, 1, stdout="", stderr="not installed")
+            return subprocess.CompletedProcess(
+                command, _COMMAND_NOT_FOUND, stdout="", stderr="not installed"
+            )
         return transport[key]
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        return subprocess.run(command, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        # Only an absent executable reaches here: the probe passes no cwd.
+        return subprocess.CompletedProcess(
+            command, _COMMAND_NOT_FOUND, stdout="", stderr="command not found"
+        )
+
+
+def _gh_failure_detail(probe: subprocess.CompletedProcess[str], command: str) -> str:
+    """Explain one failed gh probe without guessing a cause the probe did not name.
+
+    Args:
+        probe: The failed probe.
+        command: The probe command, quoted into the diagnostic.
+
+    Returns:
+        A failure explanation: the absent-tool and rejected-credential
+        classes name their remedy; every other exit names the status and
+        gh's first stderr line, so a transient network failure is never
+        mistaken for a missing credential.
+    """
+    if probe.returncode == _COMMAND_NOT_FOUND:
+        return "gh is not runnable on PATH; install GitHub CLI"
+    if any(marker in probe.stderr.lower() for marker in _UNAUTHENTICATED_MARKERS):
+        return "gh is not authenticated; run gh auth login"
+    first = probe.stderr.strip().splitlines()[0].strip() if probe.stderr.strip() else ""
+    detail = f": {first}" if first else ""
+    return f"the gh probe failed ({command} exited {probe.returncode}{detail}); rerun if transient"
 
 
 def resolve_hdsh_ref(explicit: str | None, transport: Transport | None) -> Resolution:
@@ -120,16 +165,24 @@ def resolve_account_type(
         The resolution with its echo.
 
     Raises:
-        WizardError: When no flag was given and the owner type cannot be read.
+        WizardError: When no flag was given and the owner type cannot be
+            probed — the tool is absent, the credential is rejected, or the
+            probe itself fails.
     """
     if explicit is not None:
         return Resolution(explicit, FLAG, f"--account-type {explicit} (flag)")
     probe = _run(["gh", "api", f"repos/{owner}/{repository}", "--jq", ".owner.type"], transport)
     owner_type = probe.stdout.strip()
     if probe.returncode != 0 or owner_type not in ("User", "Organization"):
+        detail = (
+            _gh_failure_detail(probe, f"gh api repos/{owner}/{repository}")
+            if probe.returncode != 0
+            else f"the owner type read as {owner_type!r}"
+        )
         msg = (
             f"--account-type was not passed and the owner type of {owner}/{repository} "
-            "could not be derived; pass --account-type user or --account-type organization"
+            f"could not be derived ({detail}); "
+            "pass --account-type user or --account-type organization"
         )
         raise WizardError(msg)
     flavor = "user" if owner_type == "User" else "organization"
@@ -181,16 +234,22 @@ def resolve_lifecycle_actor(explicit: str | None, transport: Transport | None) -
         The resolution with its echo.
 
     Raises:
-        WizardError: When no flag was given and gh is not authenticated.
+        WizardError: When no flag was given and the gh identity cannot be
+            probed — the tool is absent, the credential is rejected, or the
+            probe itself fails.
     """
     if explicit is not None:
         return Resolution(explicit, FLAG, f"--lifecycle-actor {explicit} (flag)")
     probe = _run(["gh", "api", "user", "--jq", ".login"], transport)
     login = probe.stdout.strip()
     if probe.returncode != 0 or not login:
+        detail = (
+            _gh_failure_detail(probe, "gh api user")
+            if probe.returncode != 0
+            else "gh api user returned an empty login"
+        )
         msg = (
-            "--lifecycle-actor was not passed and gh is not authenticated; "
-            "authenticate gh or pass the Project credential's login"
+            f"--lifecycle-actor was not passed and {detail}, or pass the Project credential's login"
         )
         raise WizardError(msg)
     return Resolution(login, DERIVED, f"--lifecycle-actor {login} (derived from the gh identity)")
@@ -211,7 +270,7 @@ def preflight(transport: Transport | None) -> list[str]:
         failures.append("git is not runnable; install Git 2.26 or newer")
     gh_auth = _run(["gh", "auth", "status"], transport)
     if gh_auth.returncode != 0:
-        failures.append("gh is not authenticated; run gh auth login")
+        failures.append(_gh_failure_detail(gh_auth, "gh auth status"))
     hdsh = _run(["hdsh", "--version"], transport)
     if hdsh.returncode != 0:
         failures.append(
