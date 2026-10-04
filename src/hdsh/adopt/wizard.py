@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
     from hdsh import cliargs
 
+from hdsh.adopt.corpus import HDSH_REPOSITORY
+
 TOOL = "hdsh adopt"
 
 #: Sources of one resolved parameter, most to least authoritative.
@@ -69,6 +71,10 @@ def _run(command: list[str], transport: Transport | None) -> subprocess.Complete
 def resolve_hdsh_ref(explicit: str | None, transport: Transport | None) -> Resolution:
     """Resolve the pinned hdsh ref: the flag, or the latest upstream release tag.
 
+    Tags are read from the upstream repository URL directly, never from the
+    consumer's remotes: a consumer that carries its own ``vX.Y.Z`` tags must
+    not have them mistaken for hdsh refs.
+
     Args:
         explicit: The ``--hdsh-ref`` flag value, or ``None`` when absent.
         transport: Injected command results for the hermetic suite.
@@ -82,7 +88,7 @@ def resolve_hdsh_ref(explicit: str | None, transport: Transport | None) -> Resol
     """
     if explicit is not None:
         return Resolution(explicit, FLAG, f"--hdsh-ref {explicit} (flag)")
-    tags = _run(["git", "ls-remote", "--tags", "origin"], transport)
+    tags = _run(["git", "ls-remote", "--tags", f"https://github.com/{HDSH_REPOSITORY}"], transport)
     versions: list[tuple[tuple[int, int, int], str]] = []
     for line in tags.stdout.splitlines():
         match = _VERSION_TAG.search(line.strip())
@@ -210,8 +216,12 @@ def preflight(transport: Transport | None) -> list[str]:
     if hdsh.returncode != 0:
         failures.append(
             "bare hdsh is not runnable on PATH; host-install it with "
-            "`uv tool install harness-deepseek-harness`"
+            '`uv tool install "harness-deepseek-harness @ git+<url>@<ref>"` '
+            "(until PyPI publishes)"
         )
+    rg_version = _run(["rg", "--version"], transport)
+    if rg_version.returncode != 0:
+        failures.append("ripgrep is not runnable on PATH; install ripgrep (the rg command)")
     return failures
 
 
@@ -229,5 +239,5 @@ def main(args: argparse.Namespace) -> int:  # noqa: ARG001
     if failures:
         print(f"{TOOL}: {len(failures)} preflight failure(s)", file=sys.stderr)
         return 1
-    print(f"{TOOL}: local toolchain ready (git, gh authenticated, bare hdsh on PATH)")
+    print(f"{TOOL}: local toolchain ready (git, gh authenticated, bare hdsh on PATH, rg on PATH)")
     return 0

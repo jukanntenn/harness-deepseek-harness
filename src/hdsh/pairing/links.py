@@ -1113,19 +1113,23 @@ def has_language_switcher(markdown: str, accepted_targets: tuple[str, ...] | lis
     return language_switcher_line(markdown, accepted_targets) is not None
 
 
-def _external_pairing_anchor(authored: str) -> str:
-    """Normalize an absolute ``.zh.md`` document URL to its English anchor form.
+def _english_anchor_form(authored: str) -> str:
+    """Project one destination to its English-anchor form.
 
-    Absolute links to a paired document carry a per-side locale suffix (the
-    English side links the ``.md`` URL, the Chinese side the ``.zh.md`` URL,
-    as adoption rewrites upstream references); the structural signature
-    compares them at the pair anchor.
+    Destinations whose per-side locale differs carry a per-side suffix: the
+    English side links the ``.md`` form, the Chinese side the ``.zh.md``
+    form — as adoption rewrites upstream references for absolute URLs, and
+    as the pairing convention has each side link for relative paths outside
+    the active corpus. The structural signature compares both kinds at the
+    English anchor instead of by raw bytes, where the convention alone
+    would always diverge.
 
     Args:
         authored: Destination bytes exactly as authored.
 
     Returns:
-        The authored URL with the first ``.zh.md`` replaced by ``.md``.
+        The authored destination with the first ``.zh.md`` replaced by
+        ``.md``.
     """
     marker = ".zh.md"
     index = authored.find(marker)
@@ -1139,8 +1143,8 @@ def semantic_link_target(parsed: str, authored: str, context: LinkContext) -> st
 
     Corpus links normalize to ``hdsh-pairing-target:<english-path><suffix>``
     with the suffix exactly as authored; absolute ``.zh.md`` document URLs
-    normalize to their ``.md`` anchor form; every other destination keeps its
-    authored bytes.
+    and relative destinations outside the active corpus normalize to their
+    English-anchor form; every other destination keeps its authored bytes.
 
     Args:
         parsed: Destination as the Markdown parser resolved it.
@@ -1151,10 +1155,10 @@ def semantic_link_target(parsed: str, authored: str, context: LinkContext) -> st
         The semantic target used by the structural signature.
     """
     if is_external_or_absolute_markdown_url(parsed):
-        return _external_pairing_anchor(authored)
+        return _english_anchor_form(authored)
     resolved = _resolve_link(parsed, context, authored)
     if resolved is None:
-        return authored
+        return _english_anchor_form(authored)
     return f"{SEMANTIC_TARGET_PREFIX}{resolved.source}{resolved.suffix}"
 
 

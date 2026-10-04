@@ -155,6 +155,13 @@ class TestSignatureLinkSemantics:
         assert chinese.links == ["https://github.com/o/r/blob/v1/docs/rules.md#x"]
         assert structure_diff(english, chinese) == []
 
+    def test_non_corpus_relative_targets_compare_at_the_english_anchor(self) -> None:
+        english = self._signature("[Design](../specs/design.md#s)\n")
+        chinese = self._signature("[Design](../specs/design.zh.md#s)\n")
+        assert english.links == ["../specs/design.md#s"]
+        assert chinese.links == ["../specs/design.md#s"]
+        assert structure_diff(english, chinese) == []
+
     def test_angle_autolink_enters_the_signature(self) -> None:
         markdown = "<https://example.com/reference.md>\n"
         assert self._signature(markdown).links == ["https://example.com/reference.md"]

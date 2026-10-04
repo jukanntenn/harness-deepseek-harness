@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from hdsh.cliargs import ArgumentParser, HelpShown
+from hdsh.cliargs import ArgumentParser, InfoShown
 
 
 def _parser() -> ArgumentParser:
@@ -23,6 +23,6 @@ class TestArgumentParser:
             _parser().parse_args(["--config", "c", "--conf", "y"])
 
     def test_help_is_printed_then_signaled(self, capsys: pytest.CaptureFixture[str]) -> None:
-        with pytest.raises(HelpShown):
+        with pytest.raises(InfoShown):
             _parser().parse_args(["--help"])
         assert "usage: hdsh probe" in capsys.readouterr().out

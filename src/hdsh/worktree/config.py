@@ -540,8 +540,9 @@ def probe_pairing_merge_driver(root: str) -> str:
     msg = (
         "no runnable hdsh for the pairing merge driver (tried: "
         + "; ".join(failures)
-        + "). Install it with `uv tool install harness-deepseek-harness`, or run "
-        "inside a uv project that provides hdsh, then rerun"
+        + '). Install it with `uv tool install "harness-deepseek-harness @ '
+        'git+<url>@<ref>"` (until PyPI publishes), or run inside a uv project '
+        "that provides hdsh, then rerun"
     )
     raise WorktreeError(msg)
 

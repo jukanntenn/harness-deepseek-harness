@@ -5,7 +5,7 @@ disable-model-invocation: true
 user-invocable: true
 ---
 
-# Translating hdsh docs
+# Translating documentation
 
 ## Invocation boundary
 

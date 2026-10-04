@@ -38,20 +38,26 @@ _NON_SOURCE_DIRECTORIES = frozenset(
     }
 )
 _EXPLICIT_CORPUS_PREFIXES = (".agents/rfcs/",)
-#: Corpus files the harness itself keeps English-only — agent instructions
-#: and the translation-memory references. These are corpus constants, not
-#: manifest entries: every adopter ships the same standard corpus, so the
-#: seeds moved out of the consumer-owned manifest into the scope predicate.
+#: Agent instructions stay English-only as a class: any ``AGENTS.md`` that
+#: joins the corpus — from the standard trees or a manifest ``roots``
+#: subtree — carries agent-facing working rules, and English is the working
+#: language. A class rule, not a manifest entry: no rooted subtree should
+#: ever have to punch per-file ``governed`` holes for its instructions.
+_AGENT_INSTRUCTION_FILE = re.compile(r"(?:^|/)AGENTS\.md$")
+#: Corpus files the harness itself keeps English-only — the
+#: translation-memory references. These are corpus constants, not manifest
+#: entries: every adopter ships the same standard corpus, so the seeds
+#: moved out of the consumer-owned manifest into the scope predicate.
 _ENGLISH_ONLY_FILES = frozenset(
     {
-        ".agents/rfcs/AGENTS.md",
-        ".agents/rfcs/implemented/AGENTS.md",
-        ".agents/rfcs/archived/AGENTS.md",
-        "docs/AGENTS.md",
         "docs/i18n/terminology.md",
         "docs/i18n/style-samples.md",
     }
 )
+
+
+def _is_english_only(file: str) -> bool:
+    return _AGENT_INSTRUCTION_FILE.search(file) is not None or file in _ENGLISH_ONLY_FILES
 
 
 def _is_excluded_path(file: str) -> bool:
@@ -78,7 +84,7 @@ def is_scope_file(file: str) -> bool:
         not file.startswith(".agents/rfcs/archived/")
         and not file.startswith(_PACKAGED_DATA_PREFIXES)
         and not _is_excluded_path(file)
-        and file not in _ENGLISH_ONLY_FILES
+        and not _is_english_only(file)
         and (
             _README_ARTIFACT.search(file) is not None
             or _ROOT_PAIRED_DOCUMENT_ARTIFACT.match(file) is not None
@@ -91,8 +97,11 @@ def corpus_file_predicate(manifest: PairingManifest) -> Callable[[str], bool]:
     """Build the active corpus membership predicate for one manifest.
 
     The active corpus is the standard scope plus the manifest's ``roots``
-    subtrees, minus its ``excluded`` and ``governed`` entries; it drives
-    discovery, named-anchor validation, and link-source semantics alike.
+    subtrees, minus its ``excluded`` and ``governed`` entries and the
+    English-only class constants — the constants subtract after ``roots``
+    extension, so a rooted subtree's agent instructions stay English-only
+    without per-file manifest holes; the predicate drives discovery,
+    named-anchor validation, and link-source semantics alike.
 
     Args:
         manifest: The parsed pairing manifest.
@@ -103,7 +112,9 @@ def corpus_file_predicate(manifest: PairingManifest) -> Callable[[str], bool]:
 
     def is_corpus_file(file: str) -> bool:
         return (is_scope_file(file) or manifest_rooted(file, manifest)) and not (
-            manifest_excluded(file, manifest) or manifest_governed(file, manifest)
+            manifest_excluded(file, manifest)
+            or manifest_governed(file, manifest)
+            or _is_english_only(file)
         )
 
     return is_corpus_file

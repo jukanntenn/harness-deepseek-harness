@@ -21,7 +21,7 @@
 
   当两个分支都包含同一配对的有效确认时，`hdsh-pairing` Git 合并驱动（merge driver）只会在 Git 默认文本合并能分别干净合并记录所指的英文三方 blob 与中文三方 blob，且合并后的配对仍保留必需的语言切换行、链接 locale 与结构签名时，才组合出一份新记录：中文侧必须保留指向英文的反链，普通撰写的英文源必须保留指向中文的链接，manifest `generated` 清单内的生成英文源不作此要求。该驱动由 `.gitattributes` 中针对 `*.i18n.yaml` 的 `merge=hdsh-pairing` 声明，并由 `uv run hdsh worktree install` 注册到当前 worktree。任何驱动无法验证的结构都保留为普通冲突；`uv run hdsh pairing merge --resolve` 会对已经停止的合并执行同一套遇错即保留冲突的操作：暂存每份可安全生成的配对记录，并在还有其他配对冲突时以非零状态退出。没有 `.gitattributes` 声明时驱动永不运行，记录按纯文本合并：不相邻的逐行改动干净组合但无结构校验，同条目改动以普通文本冲突，配对门禁在提交与 CI 兜底每一种情形。[双语配对门禁 RFC](../../.agents/rfcs/implemented/process/2026-09-07-bilingual-pairing-gate.zh.md) 负责记录该机制与备选方案。
 - **语言切换行。** 中文文件一律在 H1 标题后立即以 `[English](foo.md) | 中文` 链回英文，普通撰写的英文文件在同一位置以 `English | [中文](foo.zh.md)` 互链；两个标签位都可写 `中文` 或 `简体中文`，门禁两者皆收、风格规则择一；manifest `generated` 清单内的生成英文源省略此行，以便与生成器输出逐字节一致，其中文对侧仍链接回英文。发布到 GitHub 以外位置的 README（例如 PyPI 项目元数据）可以改用 manifest `public_blob_root` 前缀为同一对侧文件配置的绝对 URL，使切换行在该位置仍可访问。
-- **结构与另一侧一一对应。** 标题深度与顺序、列表类型、有序列表起始编号、列表项数量、表格行列数、保留原样 query/fragment 后缀的语义链接目标（绝对文档 URL 按其 `.md` 锚点形态比较），以及逐字节一致的代码块在配对两侧一一对应；由 `<!-- BEGIN GENERATED ... -->`／`<!-- END GENERATED ... -->` 标记界定的生成区块，除配对文档 locale 路径（比较前归一化为配对锚点）外必须逐字节一致。相对文档链接的目标属于活跃双语语料时，英文侧使用其 `.md` 路径，中文侧使用其 `.zh.md` 路径。该范围内缺少对侧属于配对完整性错误，不得回退；范围外的目标保留原路径。完整保持规则见 [translation-rules.md](translation-rules.zh.md)。本仓库的 Markdown 约定对 `.zh.md` 文件原样生效：一个段落一个物理行（`uv run hdsh docs wrap`）、相对链接必须可解析（`uv run hdsh docs links`）、文件末尾恰好一个换行。
+- **结构与另一侧一一对应。** 标题深度与顺序、列表类型、有序列表起始编号、列表项数量、表格行列数、保留原样 query/fragment 后缀的语义链接目标（绝对文档 URL 按其 `.md` 锚点形态比较），以及逐字节一致的代码块在配对两侧一一对应；由 `<!-- BEGIN GENERATED ... -->`／`<!-- END GENERATED ... -->` 标记界定的生成区块，除配对文档 locale 路径（比较前归一化为配对锚点）外必须逐字节一致。相对文档链接的目标属于活跃双语语料时，英文侧使用其 `.md` 路径，中文侧使用其 `.zh.md` 路径。该范围内缺少对侧属于配对完整性错误，不得回退；范围外的相对目标按英文锚点形态比较——`.zh.md` 目标与其 `.md` 对侧等价——因此在范围外遵循每侧 locale 约定不会使配对发散。完整保持规则见 [translation-rules.md](translation-rules.zh.md)。本仓库的 Markdown 约定对 `.zh.md` 文件原样生效：一个段落一个物理行（`uv run hdsh docs wrap`）、相对链接必须可解析（`uv run hdsh docs links`）、文件末尾恰好一个换行。
 
 ## 门禁：hdsh-pairing-verify
 
@@ -45,7 +45,7 @@
 
 **排除**（永不配对，门禁拒绝为它们建 `.zh.md` 或 `.i18n.yaml`）。下列 agent 指令与翻译记忆文件是门禁自带的语料常量，manifest 不再为它们列条目：
 
-- `docs/AGENTS.md`、`.agents/rfcs/AGENTS.md`、`.agents/rfcs/implemented/AGENTS.md` 与 `.agents/rfcs/archived/AGENTS.md`：agent 指令，只以英文维护；根 `AGENTS.md` 同样不在语料范围内。
+- 树中任何 `AGENTS.md`：agent 指令，按类规则只以英文维护——manifest `roots` 子树因此无需逐文件打 `governed` 豁免；根 `AGENTS.md` 同样不在语料范围内。
 - [terminology.md](terminology.md) 与 [style-samples.md](style-samples.md)：前者是中文侧的术语参考，后者本身即中英对照，配对检查对二者都没有意义。
 - `.agents/rfcs/archived/`：整个冻结的档案目录树，封存的历史记录仅供引用，绝不编辑、翻译或重新记录。
 

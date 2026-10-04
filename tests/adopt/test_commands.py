@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -74,8 +76,19 @@ class TestApplyRoundTrip:
     ) -> None:
         assert apply_cli(*adopt_arguments()) == 0
         output = capsys.readouterr().out
-        assert "installed 60 file(s); recorded 13 pair(s)" in output
+        assert "installed 61 file(s); recorded 13 pair(s)" in output
+        assert "pairing corpus after apply: 14 English document(s) in scope" in output
         assert (consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md").is_file()
+        assert (consumer.root / ".github" / "actionlint.yaml").is_file()
+        actionlint = (consumer.root / ".github" / "actionlint.yaml").read_text(encoding="utf-8")
+        assert "invalid activity type" in actionlint
+        assert "events-that-trigger-workflows#issue" in actionlint
+        reviewing = (consumer.root / ".agents" / "skills" / "reviewing" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "`hdsh scope --base" in reviewing
+        assert "uv run hdsh" not in reviewing
+        assert "uv run hdsh" not in (consumer.root / "docs" / "AGENTS.md").read_text("utf-8")
         assert (consumer.root / "docs" / "i18n" / "README.zh.md").is_file()
         assert (consumer.root / ".github" / "workflows" / "issue-policy.yml").is_file()
         assert "project-token: ${{ secrets.HDSH_ISSUE_PROJECT_TOKEN }}" in (
@@ -154,6 +167,17 @@ class TestApplyRoundTrip:
         assert "the .gitattributes pairing driver line is already present" in (
             capsys.readouterr().out
         )
+
+    def test_a_malformed_consumer_pairing_manifest_skips_the_sizing_note(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / ".hdsh").mkdir()
+        (consumer.root / ".hdsh" / "pairing.manifest.json").write_text("{ bad", encoding="utf-8")
+        commit_all(consumer, "malformed manifest")
+        assert apply_cli(*adopt_arguments()) == 1
+        captured = capsys.readouterr()
+        assert "pairing corpus after apply:" not in captured.out
+        assert "recording .agents/rfcs/README.md failed" in captured.err
 
     def test_upgrade_replaces_unmodified_files_and_the_pinned_ref(self, consumer: Repo) -> None:
         assert apply_cli(*adopt_arguments()) == 0
@@ -639,6 +663,88 @@ class TestVerify:
         assert "AGENTS.md: missing" in capsys.readouterr().err
 
 
+class TestWorkflowGroupDrift:
+    def _write_workflow(self, consumer: Repo, run_line: str, name: str = "lint.yml") -> None:
+        workflow = consumer.root / ".github" / "workflows" / name
+        workflow.write_text(
+            "on: [push]\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n"
+            f"      - run: {run_line}\n",
+            encoding="utf-8",
+        )
+        commit_all(consumer, "add CI")
+
+    def test_a_group_filter_without_hdsh_is_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        self._write_workflow(consumer, "prek run --all-files --group format --group lint")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        error = capsys.readouterr().err
+        assert "lint.yml:6: prek run filters --group without 'hdsh'" in error
+        assert "add --group hdsh" in error
+
+    def test_yaml_workflows_are_scanned_too(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        self._write_workflow(consumer, "prek run --all-files --group format", name="check.yaml")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        assert "check.yaml:6: prek run filters --group without 'hdsh'" in (capsys.readouterr().err)
+
+    def test_including_the_hdsh_group_clears_the_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        self._write_workflow(consumer, "prek run --all-files --group format --group hdsh")
+        capsys.readouterr()
+        assert verify_cli() == 1  # placeholders remain
+        assert "--group without 'hdsh'" not in capsys.readouterr().err
+
+    def test_unfiltered_and_commented_commands_are_ignored(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        self._write_workflow(
+            consumer, "prek run --all-files  # prek run --group format stays a comment"
+        )
+        capsys.readouterr()
+        assert verify_cli() == 1  # placeholders remain
+        assert "--group without 'hdsh'" not in capsys.readouterr().err
+
+    def test_no_workflows_directory_is_not_drift(self, tmp_path: Path) -> None:
+        assert adopt_commands._workflow_group_drift(str(tmp_path)) == []
+
+
+class TestPairingSizingNote:
+    def test_without_any_manifest_there_is_no_note(self, tmp_path: Path) -> None:
+        assert adopt_commands._pairing_sizing_note(str(tmp_path), [], []) is None
+
+
+class TestInvocationDrift:
+    def test_a_hand_reintroduced_source_invocation_is_drift(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        target = consumer.root / ".agents" / "skills" / "reviewing" / "SKILL.md"
+        target.write_text(
+            target.read_text(encoding="utf-8").replace("`hdsh scope", "`uv run hdsh scope"),
+            encoding="utf-8",
+        )
+        commit_all(consumer, "hand edit")
+        capsys.readouterr()
+        assert verify_cli() == 1
+        error = capsys.readouterr().err
+        assert "reviewing/SKILL.md:8: carries `uv run hdsh`" in error
+        assert "rerun hdsh adopt apply" in error
+
+
 class TestPrekBlockUnits:
     def test_managed_block_pins_the_ref_and_every_hook(self) -> None:
         block = _managed_prek_block("v9.9.9")
@@ -888,3 +994,22 @@ class TestLeafParsing:
     def test_verify_takes_no_parameters(self) -> None:
         with pytest.raises(ValueError, match="unrecognized arguments"):
             parse_command(adopt_commands.register, ["verify", "--hdsh-ref", "v1"])
+
+
+class TestAdoptionDate:
+    def test_the_date_follows_the_project_zone(self) -> None:
+        instant = datetime.datetime(
+            2026, 10, 3, 6, 14, tzinfo=datetime.timezone(datetime.timedelta(hours=8))
+        )
+
+        def frozen(tz: datetime.tzinfo) -> datetime.datetime:
+            return instant.astimezone(tz)
+
+        assert adopt_commands._adoption_date("Asia/Shanghai", now=frozen) == "2026-10-03"
+        assert adopt_commands._adoption_date("America/New_York", now=frozen) == "2026-10-02"
+
+    def test_an_unresolvable_zone_stays_computable_until_its_blocker_aborts(self) -> None:
+        assert re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}",
+            adopt_commands._adoption_date("Mars/Olympus", now=datetime.datetime.now),
+        )

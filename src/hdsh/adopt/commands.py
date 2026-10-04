@@ -37,6 +37,7 @@ from hdsh.adopt.manifest import (
 from hdsh.docs.config import parse_docs_manifest
 from hdsh.docs.markdown import document_anchors
 from hdsh.pairing import verify as pairing_verify
+from hdsh.pairing.corpus import corpus_file_predicate
 from hdsh.pairing.manifest import parse_manifest as parse_pairing_manifest
 from hdsh.policy.config import PolicyConfig
 
@@ -99,7 +100,7 @@ class AdoptionPlan:
 
     #: Resolved parameters every rendered asset derived from.
     parameters: AdoptParameters
-    #: Adoption date in ``yyyy-mm-dd`` form.
+    #: Adoption date in ``yyyy-mm-dd`` form, derived from the Project time zone.
     date: str
     #: Every file write, in installation order.
     writes: tuple[PlannedWrite, ...]
@@ -453,13 +454,38 @@ def _pair_writes(anchor: str, installed: frozenset[str], hdsh_ref: str) -> list[
     return writes
 
 
-def _preflight(root: str, arguments: argparse.Namespace, today: str) -> AdoptionPlan:
+def _adoption_date(time_zone: str, *, now: Callable[[datetime.tzinfo], datetime.datetime]) -> str:
+    """The adoption date in the Project's time zone, ``yyyy-mm-dd`` form.
+
+    Dated records (the adopt-decision RFC anchor) follow the operator's
+    calendar, so the date derives from the same zone the Project uses —
+    never from UTC alone, which can sit a day behind the operator. The
+    clock is injected so the hermetic suite can sit one instant on two
+    calendars.
+
+    Args:
+        time_zone: The resolved Project time zone.
+        now: The clock, returning the current instant in the given zone.
+
+    Returns:
+        Today in the Project's zone.
+    """
+    try:
+        zone = zoneinfo.ZoneInfo(time_zone)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        # An unknown zone already carries a --time-zone blocker that aborts
+        # the run; this discarded date only has to stay computable until
+        # the blockers surface, so nothing else reaches this handler.
+        zone = datetime.UTC
+    return now(zone).date().isoformat()
+
+
+def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
     """Validate every precondition and compute the complete write plan.
 
     Args:
         root: Consumer repository root.
         arguments: Parsed leaf namespace with the adoption parameters.
-        today: Adoption date in ``yyyy-mm-dd`` form.
 
     Returns:
         The validated plan.
@@ -471,6 +497,7 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
     blockers: list[Blocker] = []
     notes: list[str] = []
     parameters = _resolve_parameters(root, arguments, blockers, notes)
+    today = _adoption_date(parameters.time_zone, now=datetime.datetime.now)
     installed = corpus.installed_destinations(today)
     writes: list[PlannedWrite] = []
     records: list[str] = []
@@ -506,8 +533,10 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
         records.append(anchor)
 
     for template, dest in corpus.TEMPLATE_FILES:
-        rendered = corpus.render_tokens(
-            (_TEMPLATES_ROOT / template).read_text(encoding="utf-8"), parameters, today
+        rendered = corpus.map_invocations(
+            corpus.render_tokens(
+                (_TEMPLATES_ROOT / template).read_text(encoding="utf-8"), parameters, today
+            )
         )
         writes.append(PlannedWrite(dest=dest, content=rendered.encode("utf-8")))
         if dest in corpus.TEMPLATE_PAIRS:
@@ -552,6 +581,9 @@ def _preflight(root: str, arguments: argparse.Namespace, today: str) -> Adoption
     )
     if blockers:
         raise _blockers_error(blockers)
+    sizing = _pairing_sizing_note(root, writes, records)
+    if sizing is not None:
+        notes.append(sizing)
     notes.append(
         "the managed prek hooks carry group 'hdsh'; a CI that filters prek with "
         "--group must include it"
@@ -661,6 +693,57 @@ def _plan_gitattributes(
     )
 
 
+def _pairing_sizing_note(root: str, writes: list[PlannedWrite], records: list[str]) -> str | None:
+    """Summarize the pairing workload the adoption leaves behind.
+
+    Discovery runs over the post-apply corpus: the disk tree plus the
+    planned writes, under the pairing manifest this apply installs or finds.
+    The count exists because "pair the README" undersells the real corpus —
+    every README pair at any depth is auto-discovered and manifest ``roots``
+    pull whole subtrees in — and an operator sizing the work from one pair
+    discovers the rest only when the gate turns red.
+
+    Args:
+        root: Consumer repository root.
+        writes: The final planned writes.
+        records: English anchors this apply records after writing.
+
+    Returns:
+        The sizing note, or ``None`` when no readable pairing manifest
+        exists (the consumer-structure checks own that failure elsewhere).
+    """
+    manifest_write = next(
+        (write for write in writes if write.dest == ".hdsh/pairing.manifest.json"), None
+    )
+    if manifest_write is not None:
+        text = manifest_write.content.decode("utf-8")
+    else:
+        path = Path(root, ".hdsh/pairing.manifest.json")
+        if not path.exists():
+            return None
+        text = path.read_text(encoding="utf-8")
+    try:
+        manifest = parse_pairing_manifest(text)
+    except (TypeError, ValueError):
+        return None
+    is_corpus_file = corpus_file_predicate(manifest)
+    corpus_files = pairing_verify.PairingRepository(root).discover_scope_files(is_corpus_file)
+    corpus_files |= {write.dest for write in writes if is_corpus_file(write.dest)}
+    sources = {
+        file for file in corpus_files if file.endswith(".md") and not file.endswith(".zh.md")
+    }
+    unpaired = sorted(
+        source
+        for source in sources
+        if f"{source[: -len('.md')]}.zh.md" not in corpus_files and source not in records
+    )
+    return (
+        f"pairing corpus after apply: {len(sources)} English document(s) in scope, "
+        f"{len(unpaired)} still need a Chinese counterpart and a record — "
+        "hdsh pairing list enumerates them"
+    )
+
+
 def _load_previous_manifest(root: str, blockers: list[Blocker]) -> AdoptManifest | None:
     """Load a previous adoption's manifest, if any, for slot baselines.
 
@@ -708,7 +791,7 @@ def _plan_slot_templates(
     recorded = previous.slot_guidance if previous is not None else {}
     guidance_out: dict[str, dict[str, str]] = {}
     for template, dest in corpus.SLOT_TEMPLATE_FILES:
-        rendered = (_TEMPLATES_ROOT / template).read_text(encoding="utf-8")
+        rendered = corpus.map_invocations((_TEMPLATES_ROOT / template).read_text(encoding="utf-8"))
         target = Path(root, dest)
         try:
             fresh = corpus.parse_slots(rendered)
@@ -893,7 +976,10 @@ def _add_adopt_arguments(parser: argparse.ArgumentParser) -> None:
         "--time-zone",
         metavar="<zone>",
         default=None,
-        help="IANA time zone of the Project (for example Asia/Shanghai)",
+        help=(
+            "IANA time zone of the Project; also fixes the adoption date "
+            "(for example Asia/Shanghai)"
+        ),
     )
     parser.add_argument(
         "--priority-field",
@@ -927,9 +1013,8 @@ def plan_main(args: argparse.Namespace) -> int:
     except AdoptError as error:
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
-    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
     try:
-        plan = _preflight(root, args, today)
+        plan = _preflight(root, args)
     except AdoptError as error:
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
@@ -950,9 +1035,8 @@ def apply_main(args: argparse.Namespace) -> int:
     except AdoptError as error:
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
-    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
     try:
-        plan = _preflight(root, args, today)
+        plan = _preflight(root, args)
     except AdoptError as error:
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
@@ -1091,6 +1175,66 @@ def _consumer_config_drift(root: str, manifest: AdoptManifest) -> list[str]:
     return problems
 
 
+_PREK_GROUP = re.compile(r"--group(?:[= ])(\S+)")
+
+
+def _workflow_group_drift(root: str) -> list[str]:
+    """Flag ``prek run`` workflow commands whose ``--group`` filter omits ``hdsh``.
+
+    prek's ``--group`` filtering silently drops every hook whose group is not
+    listed, so a filtered CI command without the managed ``hdsh`` group never
+    runs the adopted gates — the exact silent failure mode the harness exists
+    to eliminate. Trailing ``#`` comments are not part of the command.
+
+    Args:
+        root: Consumer repository root.
+
+    Returns:
+        Drift entries naming each offending workflow line.
+    """
+    drift: list[str] = []
+    workflows = Path(root, ".github", "workflows")
+    if not workflows.is_dir():
+        return drift
+    paths = sorted({*workflows.glob("*.yml"), *workflows.glob("*.yaml")})
+    for path in paths:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            command = line.split("#", 1)[0]
+            if "prek run" not in command or "--group" not in command:
+                continue
+            if "hdsh" not in _PREK_GROUP.findall(command):
+                drift.append(
+                    f".github/workflows/{path.name}:{number}: prek run filters --group "
+                    "without 'hdsh'; add --group hdsh or drop the filter, or every "
+                    "managed gate silently drops out of this command"
+                )
+    return drift
+
+
+def _invocation_drift(root: str, sources: tuple[str, ...]) -> list[str]:
+    """Flag transplanted files still carrying the source invocation form.
+
+    Args:
+        root: Consumer repository root.
+        sources: Every installed destination adoption owns.
+
+    Returns:
+        Drift entries naming each leftover ``uv run hdsh`` line.
+    """
+    drift: list[str] = []
+    for dest in sources:
+        path = Path(root, dest)
+        if not path.exists():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if corpus.SOURCE_INVOCATION in line:
+                drift.append(
+                    f"{dest}:{number}: carries `{corpus.SOURCE_INVOCATION.strip()}` — "
+                    "transplanted files run the bare command; rerun hdsh adopt apply"
+                )
+    return drift
+
+
 def verify_main(args: argparse.Namespace) -> int:
     """``hdsh adopt verify`` entry point.
 
@@ -1111,8 +1255,13 @@ def verify_main(args: argparse.Namespace) -> int:
         print(f"{TOOL}: {error}", file=sys.stderr)
         return 1
     drift: list[str] = _consumer_config_drift(root, manifest)
+    drift.extend(_workflow_group_drift(root))
     placeholders: list[str] = []
     pending: list[str] = []
+    sources = tuple(
+        sorted(manifest.files.keys() | set(manifest.editable) | set(manifest.slot_templates))
+    )
+    drift.extend(_invocation_drift(root, sources))
     for dest, digest in sorted(manifest.files.items()):
         path = Path(root, dest)
         if not path.exists():
@@ -1136,9 +1285,6 @@ def verify_main(args: argparse.Namespace) -> int:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if PLACEHOLDER_MARKER in line:
                 placeholders.append(f"{dest}:{number}: {line.strip()}")
-    sources = tuple(
-        sorted(manifest.files.keys() | set(manifest.editable) | set(manifest.slot_templates))
-    )
     for dest in manifest.pending_merges:
         path = Path(root, dest)
         if not path.exists():

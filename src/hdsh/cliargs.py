@@ -1,11 +1,11 @@
 """argparse wiring for the ``hdsh`` exit-code contract.
 
-argparse parsers print and exit the process on usage errors and on
-``--help``; hdsh command handlers return integer exit codes instead. This
-module converts both parser exits into ordinary control flow: usage errors
-surface as ``ValueError`` messages prefixed with the parser's ``prog``, and
-a handled ``--help`` surfaces as ``HelpShown`` (its text is already on
-stdout when the exception is raised).
+argparse parsers print and exit the process on usage errors, ``--help``,
+and ``--version``; hdsh command handlers return integer exit codes instead.
+This module converts those parser exits into ordinary control flow: usage
+errors surface as ``ValueError`` messages prefixed with the parser's
+``prog``, and a handled ``--help`` or ``--version`` surfaces as
+``InfoShown`` (its text is already on stdout when the exception is raised).
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from typing import Any, NoReturn, override
 type CommandSubparsers = Any
 
 
-class HelpShown(Exception):  # noqa: N818 - a successful help exit, not an error condition
-    """``-h``/``--help`` was handled; its text is already on stdout."""
+class InfoShown(Exception):  # noqa: N818 - a successful informational exit, not an error condition
+    """``-h``/``--help`` or ``--version`` was handled; its text is already on stdout."""
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -50,13 +50,13 @@ class ArgumentParser(argparse.ArgumentParser):
 
     @override
     def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
-        """Convert the parser's exit path to :class:`HelpShown`.
+        """Convert the parser's exit path to :class:`InfoShown`.
 
-        Only the help action reaches this method, ignoring both arguments:
-        :meth:`error` is overridden above and no version actions are
-        registered.
+        Only the help and version actions reach this method, ignoring both
+        arguments: :meth:`error` is overridden above and nothing else exits
+        the parser.
 
         Raises:
-            HelpShown: Always, after the help action printed its text.
+            InfoShown: Always, after the acting handler printed its text.
         """
-        raise HelpShown
+        raise InfoShown

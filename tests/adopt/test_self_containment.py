@@ -15,6 +15,7 @@ from pathlib import Path
 from hdsh.adopt import corpus
 
 _MIRRORS_ROOT = Path(corpus.__file__).parent / "templates" / "mirrors"
+_TEMPLATES_ROOT = Path(corpus.__file__).parent / "templates" / "templates"
 _INSTALLED = corpus.installed_destinations("2026-01-01")
 _BARE_INVOCATION = re.compile(r"`hdsh [a-z]")
 _NON_HDSH_UV_COMMAND = re.compile(r"`uv run (?!hdsh)[a-z]")
@@ -62,3 +63,15 @@ class TestSelfContainment:
         assert corpus.map_invocations(text) == (
             "Prose says `hdsh scope`.\n\n```sh\nhdsh pairing verify\n```\n"
         )
+
+
+class TestTemplateCorpus:
+    def test_the_source_invocation_leaves_templates_only_through_mapping(self) -> None:
+        for template in (
+            "agents/skills/reviewing/SKILL.md",
+            "agents/skills/archiving-rfcs/SKILL.md",
+            "docs/AGENTS.md",
+        ):
+            text = (_TEMPLATES_ROOT / template).read_text(encoding="utf-8")
+            assert corpus.SOURCE_INVOCATION in text, template
+            assert corpus.SOURCE_INVOCATION not in corpus.map_invocations(text), template
