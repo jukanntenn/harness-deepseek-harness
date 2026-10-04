@@ -349,6 +349,20 @@ class TestSemanticTargets:
             == "gone.md"
         )
 
+    def test_non_corpus_pair_links_compare_at_the_english_anchor(self) -> None:
+        exists = {"specs/guide.md", "specs/guide.zh.md"}
+        context = _context("docs/other.md", exists, corpus=set())
+        assert (
+            pairing_links.semantic_link_target("../specs/guide.md", "../specs/guide.md", context)
+            == "../specs/guide.md"
+        )
+        assert (
+            pairing_links.semantic_link_target(
+                "../specs/guide.zh.md", "../specs/guide.zh.md", context
+            )
+            == "../specs/guide.md"
+        )
+
     def test_fragment_only_link_passes_through(self) -> None:
         assert (
             pairing_links.semantic_link_target("#anchor", "#anchor", _context("docs/a.md", set()))

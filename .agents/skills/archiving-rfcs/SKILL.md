@@ -1,9 +1,9 @@
 ---
 name: archiving-rfcs
-description: Use when adding, auditing, pruning, archiving, restoring, or reviewing RFCs in harness-deepseek-harness; checks every new RFC for superseded active records, classifies implemented RFCs by future decision value, deletes rejected RFCs that no longer prevent a tempting mistake, and applies the frozen archived/{class} triplet and manifest seal rules.
+description: Use when adding, auditing, pruning, archiving, restoring, or reviewing RFCs in this repository; checks every new RFC for superseded active records, classifies implemented RFCs by future decision value, deletes rejected RFCs that no longer prevent a tempting mistake, and applies the frozen archived/{class} triplet and manifest seal rules.
 ---
 
-# Archive harness-deepseek-harness RFCs
+# Archive RFCs
 
 Reduce the active decision corpus without erasing history that can still guide work. Judge every RFC semantically; word count and age are discovery aids, never archive criteria.
 

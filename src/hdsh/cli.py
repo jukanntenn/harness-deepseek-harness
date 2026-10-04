@@ -13,11 +13,12 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable
+from importlib.metadata import version as distribution_version
 
 from hdsh import scope
 from hdsh.adopt import commands as adopt_commands
 from hdsh.adopt import wizard as adopt_wizard
-from hdsh.cliargs import ArgumentParser, CommandSubparsers, HelpShown
+from hdsh.cliargs import ArgumentParser, CommandSubparsers, InfoShown
 from hdsh.docs import budgets, links, wrap
 from hdsh.pairing import brief as pairing_brief
 from hdsh.pairing import merge as pairing_merge
@@ -61,9 +62,18 @@ _COMMAND_DOMAINS: tuple[tuple[str, str, tuple[Registrar, ...]], ...] = (
 )
 
 
+#: The installed distribution this CLI ships as; its version answers ``--version``.
+_DISTRIBUTION_NAME = "harness-deepseek-harness"
+
+
 def _build_parser() -> ArgumentParser:
     """Build the full ``hdsh`` command tree."""
     parser = ArgumentParser(prog="hdsh")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"hdsh {distribution_version(_DISTRIBUTION_NAME)}",
+    )
     domains = parser.add_subparsers(title="domains", required=True)
     scope.register(domains)
     for name, help_text, registrars in _COMMAND_DOMAINS:
@@ -95,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
-    except HelpShown:
+    except InfoShown:
         return 0
     handler: Handler = parsed.handler
     return handler(parsed)

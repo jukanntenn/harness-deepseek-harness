@@ -1,9 +1,9 @@
 ---
 name: editing-prose
-description: Use when writing, reviewing, restoring, trimming, or auditing prose in the harness-deepseek-harness repo, including deciding where documentation or comments are required across Markdown, docstrings, code and test comments, diagnostics, and CLI strings.
+description: Use when writing, reviewing, restoring, trimming, or auditing prose in this repository, including deciding where documentation or comments are required across Markdown, docstrings, code and test comments, diagnostics, and CLI strings.
 ---
 
-# hdsh Prose Standard
+# Prose Standard
 
 Write enough to preserve the contract, then remove reasoning transcripts, repetition, and decoration. A contract is an obligation, invariant, precondition, postcondition, or compatibility promise that a caller, callee, implementer, producer, or consumer relies on. This skill owns editorial judgment and required prose coverage; use [documenting](../documenting/SKILL.md) for placement, budgets, bilingual pairs, and documentation gates, and [trimming-cot-leakage](../trimming-cot-leakage/SKILL.md) for hunting and fixing reasoning-transcript leakage. It is guidance, not a script.
 

@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record docs/i18n/README.md
-README.md: 78b1004a803c523a74f34a00d527c76dce0d2990
-README.zh.md: e193bed765674ef4e317e3ea879eaf65e10e89f7
+README.md: ee42989d9d42b5adc4facace5b70d233d8a7e153
+README.zh.md: 41bde8c71cdb1164ae4a7c1c0b55d45b8b6fea4b

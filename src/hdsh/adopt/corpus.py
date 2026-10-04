@@ -50,10 +50,6 @@ MIRRORED_FILES: tuple[tuple[str, str], ...] = (
         ".agents/skills/editing-prose/references/examples.md",
         ".agents/skills/editing-prose/references/examples.md",
     ),
-    (
-        ".agents/skills/finding-simplifications/SKILL.md",
-        ".agents/skills/finding-simplifications/SKILL.md",
-    ),
     (".agents/skills/merging-stacked-prs/SKILL.md", ".agents/skills/merging-stacked-prs/SKILL.md"),
     (".agents/skills/translating-docs/SKILL.md", ".agents/skills/translating-docs/SKILL.md"),
     (
@@ -77,6 +73,7 @@ MIRRORED_FILES: tuple[tuple[str, str], ...] = (
     (".github/ISSUE_TEMPLATE/research.md", ".github/ISSUE_TEMPLATE/research.md"),
     (".github/ISSUE_TEMPLATE/task.md", ".github/ISSUE_TEMPLATE/task.md"),
     (".github/pull_request_template.md", ".github/pull_request_template.md"),
+    (".github/actionlint.yaml", ".github/actionlint.yaml"),
 )
 
 #: Mirrored bilingual pairs by English anchor: the two language files are
@@ -168,6 +165,10 @@ SLOT_TEMPLATE_FILES: tuple[tuple[str, str], ...] = (
     ("agents/skills/pushing/SKILL.md", ".agents/skills/pushing/SKILL.md"),
     ("agents/skills/archiving-rfcs/SKILL.md", ".agents/skills/archiving-rfcs/SKILL.md"),
     ("agents/skills/reviewing/SKILL.md", ".agents/skills/reviewing/SKILL.md"),
+    (
+        "agents/skills/finding-simplifications/SKILL.md",
+        ".agents/skills/finding-simplifications/SKILL.md",
+    ),
 )
 
 #: The destinations of the slot templates, for ownership checks.
@@ -295,7 +296,8 @@ class AdoptParameters:
     project_title: str
     #: The identity whose Project mutations the lifecycle trusts.
     lifecycle_actor: str
-    #: Project time zone for date fields, an IANA zone name.
+    #: Project time zone for date fields — Project rendering and the
+    #: adoption date — an IANA zone name.
     time_zone: str
     #: Project field name holding the priority.
     priority_field: str

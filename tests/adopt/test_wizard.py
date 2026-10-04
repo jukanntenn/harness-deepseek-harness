@@ -30,18 +30,35 @@ class TestResolveHdshRef:
 
     def test_the_latest_release_tag_is_the_default(self) -> None:
         results = transport(
-            **{"git ls-remote --tags origin": "a\trefs/tags/v0.1.0\nb\trefs/tags/v0.9.0\n"}
+            **{
+                "git ls-remote --tags https://github.com/jukanntenn/harness-deepseek-harness": (
+                    "a\trefs/tags/v0.1.0\nb\trefs/tags/v0.9.0\n"
+                )
+            }
         )
         resolution = wizard.resolve_hdsh_ref(None, results)
         assert (resolution.value, resolution.source) == ("v0.9.0", wizard.DEFAULT)
 
+    def test_consumer_origin_tags_are_never_consulted(self) -> None:
+        results = transport(**{"git ls-remote --tags origin": "a\trefs/tags/v9.9.9\n"})
+        with pytest.raises(wizard.WizardError, match="no release tag"):
+            wizard.resolve_hdsh_ref(None, results)
+
     def test_no_tags_fails_loud_with_no_main_fallback(self) -> None:
-        results = transport(**{"git ls-remote --tags origin": ""})
+        results = transport(
+            **{"git ls-remote --tags https://github.com/jukanntenn/harness-deepseek-harness": ""}
+        )
         with pytest.raises(wizard.WizardError, match="no release tag"):
             wizard.resolve_hdsh_ref(None, results)
 
     def test_nonrelease_tags_do_not_count(self) -> None:
-        results = transport(**{"git ls-remote --tags origin": "a\trefs/tags/nightly\n"})
+        results = transport(
+            **{
+                "git ls-remote --tags https://github.com/jukanntenn/harness-deepseek-harness": (
+                    "a\trefs/tags/nightly\n"
+                )
+            }
+        )
         with pytest.raises(wizard.WizardError, match="no release tag"):
             wizard.resolve_hdsh_ref(None, results)
 
@@ -168,6 +185,7 @@ class TestPreflight:
             "git --version": "git version 2.45.0",
             "gh auth status": "Logged in",
             "hdsh --version": "hdsh 0.1.0",
+            "rg --version": "ripgrep 14.1.0",
         }
     )
 
@@ -176,7 +194,14 @@ class TestPreflight:
 
     def test_each_absent_tool_is_one_diagnostic(self) -> None:
         failures = wizard.preflight({})
-        assert len(failures) == 3
+        assert len(failures) == 4
         assert any("git is not runnable" in line for line in failures)
         assert any("gh is not authenticated" in line for line in failures)
         assert any("bare hdsh is not runnable" in line for line in failures)
+        assert any("ripgrep is not runnable" in line for line in failures)
+
+    def test_the_hdsh_remediation_names_the_git_install_form(self) -> None:
+        failures = wizard.preflight(
+            {key: value for key, value in self.READY.items() if key != "hdsh --version"}
+        )
+        assert any("git+<url>@<ref>" in line for line in failures)

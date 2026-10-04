@@ -1,9 +1,9 @@
 ---
 name: finding-simplifications
-description: 'Use when working in the harness-deepseek-harness repo to find non-obvious simplification candidates, remove redundant comments or implementation-heavy documentation, write proposed RFCs or inline TODO/FIXME/XXX notes, audit or coalesce superseded RFCs, or fold worthwhile simplification ideas from another PR; especially for dead, duplicated, speculative, over-built, added-then-removed, or hand-rolled-where-a-dependency-exists surfaces.'
+description: 'Use when working in this repository to find non-obvious simplification candidates, remove redundant comments or implementation-heavy documentation, write proposed RFCs or inline TODO/FIXME/XXX notes, audit or coalesce superseded RFCs, or fold worthwhile simplification ideas from another PR; especially for dead, duplicated, speculative, over-built, added-then-removed, or hand-rolled-where-a-dependency-exists surfaces.'
 ---
 
-# Finding HDSH Simplifications
+# Finding Simplifications
 
 This skill helps turn a broad "find things to simplify" request into evidence-backed RFCs that remove or collapse existing harness surface area. It is guidance, not a checklist: follow the code, keep judgment active, and prefer a few well-proven candidates over a pile of thin guesses.
 

@@ -27,10 +27,18 @@ class TestScope:
         assert is_scope_file(".agents/rfcs/implemented/process/2026-01-01-a.md")
 
     def test_english_only_corpus_constants_are_out_of_scope(self) -> None:
-        assert not is_scope_file("docs/AGENTS.md")
-        assert not is_scope_file(".agents/rfcs/AGENTS.md")
         assert not is_scope_file("docs/i18n/terminology.md")
         assert not is_scope_file("docs/i18n/style-samples.md")
+
+    def test_agents_instructions_are_english_only_as_a_class(self) -> None:
+        assert not is_scope_file("docs/AGENTS.md")
+        assert not is_scope_file(".agents/rfcs/AGENTS.md")
+        assert not is_scope_file(".agents/rfcs/implemented/AGENTS.md")
+        assert not is_scope_file(".agents/rfcs/archived/AGENTS.md")
+        manifest = parse_manifest('{"roots": [".agents/wrfcs/"]}')
+        predicate = corpus_file_predicate(manifest)
+        assert not predicate(".agents/wrfcs/AGENTS.md")
+        assert predicate(".agents/wrfcs/README.md")
 
     def test_packaged_adoption_mirrors_are_discovery_exclusions(self) -> None:
         assert not is_scope_file("src/hdsh/adopt/templates/mirrors/.agents/rfcs/README.md")

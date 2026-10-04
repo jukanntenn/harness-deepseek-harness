@@ -24,6 +24,14 @@ class TestDispatch:
         assert "scope" in out
         assert "worktree" in out
 
+    def test_version_prints_the_installed_version_and_exits_zero(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from importlib.metadata import version
+
+        assert main(["--version"]) == 0
+        assert f"hdsh {version('harness-deepseek-harness')}" in capsys.readouterr().out
+
     def test_unknown_domain_is_rejected(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert main(["bogus", "verify"]) == 2
         captured = capsys.readouterr()
