@@ -88,6 +88,7 @@ MIRRORED_PAIRS: tuple[str, ...] = (
     ".agents/rfcs/implemented/process/2026-09-07-document-corpus-gates.md",
     ".agents/rfcs/implemented/process/2026-09-07-github-workflow.md",
     ".agents/rfcs/implemented/process/2026-09-07-local-git-workflow.md",
+    ".agents/rfcs/implemented/bug-fix/2026-10-05-worktree-hook-takeover-validation.md",
     "docs/i18n/README.md",
     "docs/i18n/translation-rules.md",
     "docs/cookbook/responding-to-pr-review-on-a-stack.md",
@@ -104,6 +105,7 @@ RFC_CLOSURE: frozenset[str] = frozenset(
         ".agents/rfcs/implemented/process/2026-09-07-document-corpus-gates.md",
         ".agents/rfcs/implemented/process/2026-09-07-github-workflow.md",
         ".agents/rfcs/implemented/process/2026-09-07-local-git-workflow.md",
+        ".agents/rfcs/implemented/bug-fix/2026-10-05-worktree-hook-takeover-validation.md",
     }
 )
 

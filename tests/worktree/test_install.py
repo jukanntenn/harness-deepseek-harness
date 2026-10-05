@@ -24,7 +24,7 @@ from tests.helpers import Repo, completed_run, git, parse_command
 def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the probe and prek invocation; the installer's contract is under test."""
 
-    def skipped(root: str) -> None:
+    def skipped(root: str, hook_types: object = None) -> None:
         return None
 
     def resolved(root: str) -> str:
@@ -92,8 +92,8 @@ class TestFreshInstall:
     def test_migration_rollback_restores_the_legacy_command(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def failing_prek(root: str) -> None:
-            msg = "prek install --overwrite failed: fixture rejection"
+        def failing_prek(root: str, hook_types: object = None) -> None:
+            msg = "prek install failed: fixture rejection"
             raise WorktreeError(msg)
 
         install(str(repo.root))
@@ -246,7 +246,7 @@ class TestRollback:
     def test_prek_failure_rolls_back_owned_config(
         self, repo: Repo, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def failing_prek(root: str) -> None:
+        def failing_prek(root: str, hook_types: object = None) -> None:
             raise WorktreeError("prek exploded")
 
         monkeypatch.setattr(worktree_install, "run_prek", failing_prek)
@@ -279,7 +279,7 @@ class TestRollback:
                 raise WorktreeError("unset exploded")
             return real_run_git(root, args, **kwargs)
 
-        def failing_prek(root: str) -> None:
+        def failing_prek(root: str, hook_types: object = None) -> None:
             raise WorktreeError("prek exploded")
 
         monkeypatch.setattr(worktree_install, "run_git", selective)
@@ -297,7 +297,7 @@ class TestRollback:
         install(str(repo.root))
         hooks_value = git("config", "--worktree", "core.hooksPath", cwd=repo.root).stdout.strip()
 
-        def failing_prek(root: str) -> None:
+        def failing_prek(root: str, hook_types: object = None) -> None:
             raise WorktreeError("boom")
 
         monkeypatch.setattr(worktree_install, "run_prek", failing_prek)
@@ -513,7 +513,7 @@ def test_main_returns_zero_after_successful_install(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
 
-    def skipped(root: str) -> None:
+    def skipped(root: str, hook_types: object = None) -> None:
         return None
 
     monkeypatch.setattr(worktree_install, "run_prek", skipped)

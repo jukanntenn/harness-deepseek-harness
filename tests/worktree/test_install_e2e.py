@@ -20,8 +20,33 @@ from tests.helpers import git
 
 FAKE_PREK = """#!/bin/sh
 set -u
-if [ "$#" -ne 2 ] || [ "$1" != "install" ] || [ "$2" != "--overwrite" ]; then
+if [ "${1:-}" != "install" ]; then
   echo "fake prek: unexpected arguments: $*" >&2
+  exit 64
+fi
+shift
+overwrite_seen=0
+types=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --overwrite) overwrite_seen=1 ;;
+    --hook-type)
+      if [ $# -lt 2 ]; then
+        echo "fake prek: --hook-type needs a value" >&2
+        exit 64
+      fi
+      types="$types $2"
+      shift
+      ;;
+    *)
+      echo "fake prek: unexpected arguments: $*" >&2
+      exit 64
+      ;;
+  esac
+  shift
+done
+if [ "$overwrite_seen" -ne 1 ]; then
+  echo "fake prek: missing --overwrite" >&2
   exit 64
 fi
 if [ -n "${HDSH_TEST_FORBIDDEN_KEY:-}" ]; then
@@ -49,7 +74,10 @@ if [ -n "${HDSH_TEST_FAIL:-}" ]; then
 fi
 root=$(git rev-parse --show-toplevel)
 config=$(cat prek.toml 2>/dev/null || echo no-config)
-for name in pre-commit pre-merge-commit pre-push; do
+for name in $types; do
+  if [ "${HDSH_TEST_DROP_TYPE:-}" = "$name" ]; then
+    continue
+  fi
   printf '#!/bin/sh\\n# root=%s\\n# config=%s\\nexit 0\\n' "$root" "$config" > "$hooks/$name"
   chmod 755 "$hooks/$name"
 done
@@ -101,12 +129,25 @@ def common_dir_of(root: Path) -> Path:
 
 @pytest.fixture
 def worktrees(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """A main worktree plus a linked one, with fake prek and uv on PATH."""
+    """A main worktree plus a linked one, with fake prek and uv on PATH.
+
+    The default hooks directory carries one active plain hook, so every
+    installation here runs under the explicit orphan acknowledgment the
+    refusal demands of a real operator.
+    """
     main = _init_repo(tmp_path / "main")
     linked = tmp_path / "linked"
     git("worktree", "add", "-b", "linked", str(linked), cwd=main)
-    (main / "prek.toml").write_text("main-worktree-config\n", encoding="utf-8")
-    (linked / "prek.toml").write_text("linked-worktree-config\n", encoding="utf-8")
+    (main / "prek.toml").write_text(
+        'default_install_hook_types = ["pre-commit", "pre-merge-commit", "pre-push"]\n'
+        "# main-worktree-config\n",
+        encoding="utf-8",
+    )
+    (linked / "prek.toml").write_text(
+        'default_install_hook_types = ["pre-commit", "pre-merge-commit", "pre-push"]\n'
+        "# linked-worktree-config\n",
+        encoding="utf-8",
+    )
     legacy = common_dir_of(main) / "hooks" / "pre-commit"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text("#!/bin/sh\n# legacy hook\n", encoding="utf-8")
@@ -124,6 +165,7 @@ def worktrees(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]
     fake_uv.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setenv("HDSH_TEST_UV_LOG", str(tmp_path / "uv.log"))
+    monkeypatch.setenv("HDSH_PREK_ALLOW_ORPHANED_HOOKS", "1")
     return {
         "container": tmp_path,
         "main": main,
@@ -176,12 +218,13 @@ class TestIsolation:
         main_hook = (Path(main_hooks) / "pre-commit").read_text(encoding="utf-8")
         linked_hook = (Path(linked_hooks) / "pre-commit").read_text(encoding="utf-8")
         assert f"# root={main}" in main_hook
-        assert "# config=main-worktree-config" in main_hook
+        assert "# main-worktree-config" in main_hook
         assert str(linked) not in main_hook
         assert f"# root={linked}" in linked_hook
-        assert "# config=linked-worktree-config" in linked_hook
+        assert "# linked-worktree-config" in linked_hook
         assert str(main) not in linked_hook
         assert (Path(main_hooks) / "pre-merge-commit").is_file()
+        assert (Path(main_hooks) / "pre-push").is_file()
         assert worktrees["legacy"].read_text(encoding="utf-8") == "#!/bin/sh\n# legacy hook\n"
 
         common = common_dir_of(main) / "config"
@@ -216,7 +259,11 @@ class TestIsolation:
 
         late = worktrees["container"] / "late"
         git("worktree", "add", "-b", "late-linked", str(late), cwd=main)
-        (late / "prek.toml").write_text("late-worktree-config\n", encoding="utf-8")
+        (late / "prek.toml").write_text(
+            'default_install_hook_types = ["pre-commit", "pre-merge-commit", "pre-push"]\n'
+            "# late-worktree-config\n",
+            encoding="utf-8",
+        )
         assert git("config", "--worktree", "core.hooksPath", cwd=late).stdout.strip() == main_hooks
 
         install(str(late))
@@ -225,7 +272,7 @@ class TestIsolation:
         assert late_hooks != main_hooks
         assert git("config", "--worktree", "core.hooksPath", cwd=late).stdout.strip() == late_hooks
         late_hook = (Path(late_hooks) / "pre-commit").read_text(encoding="utf-8")
-        assert "# config=late-worktree-config" in late_hook
+        assert "# late-worktree-config" in late_hook
         assert (Path(main_hooks) / "pre-commit").read_text(encoding="utf-8") == main_hook_before
 
     def test_repairs_its_owned_absolute_hook_path_after_the_checkout_moves(
@@ -314,12 +361,12 @@ class TestConcurrency:
         assert not main_running.exists()
         assert not linked_running.exists()
         assert not (common_dir_of(main) / "hdsh-hooks-install.lock").exists()
-        assert "# config=main-worktree-config" in (
-            Path(hooks_path_of(main)) / "pre-commit"
-        ).read_text(encoding="utf-8")
-        assert "# config=linked-worktree-config" in (
-            Path(hooks_path_of(linked)) / "pre-commit"
-        ).read_text(encoding="utf-8")
+        assert "# main-worktree-config" in (Path(hooks_path_of(main)) / "pre-commit").read_text(
+            encoding="utf-8"
+        )
+        assert "# linked-worktree-config" in (Path(hooks_path_of(linked)) / "pre-commit").read_text(
+            encoding="utf-8"
+        )
 
 
 class TestRefusals:
@@ -493,7 +540,7 @@ class TestRefusals:
         # The replacement PATH carries Git and uv but no prek at all.
         os.environ["PATH"] = str(bin_without_prek)
         try:
-            with pytest.raises(WorktreeError, match="prek install --overwrite failed"):
+            with pytest.raises(WorktreeError, match="prek install failed"):
                 install(str(main))
         finally:
             os.environ["PATH"] = saved_path
@@ -641,3 +688,82 @@ class TestProbeAndPrekBoundary:
         with pytest.raises(WorktreeError, match="invalid ownership marker"):
             install(str(main))
         assert external.read_text(encoding="utf-8") == external_content
+
+
+class TestOrphanedPlainHooks:
+    def test_refuses_without_the_acknowledgment(
+        self, worktrees: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        main = worktrees["main"]
+        monkeypatch.delenv("HDSH_PREK_ALLOW_ORPHANED_HOOKS")
+        with pytest.raises(WorktreeError, match=r"orphan the active hook\(s\) pre-commit"):
+            install(str(main))
+        assert git("config", "core.hooksPath", cwd=main, check=False).returncode == 1
+        assert worktrees["legacy"].read_text(encoding="utf-8") == "#!/bin/sh\n# legacy hook\n"
+
+    def test_prek_shims_in_the_default_directory_are_not_orphans(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        main = _init_repo(tmp_path / "main")
+        (main / "prek.toml").write_text(
+            'default_install_hook_types = ["pre-commit"]\n', encoding="utf-8"
+        )
+        shim = common_dir_of(main) / "hooks" / "pre-commit"
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        shim.write_text(
+            "#!/bin/sh\n# File generated by prek: https://github.com/j178/prek\n", encoding="utf-8"
+        )
+        shim.chmod(0o755)
+        bin_directory = tmp_path / "bin"
+        bin_directory.mkdir()
+        for name, content in (("prek", FAKE_PREK), ("uv", FAKE_UV)):
+            fake = bin_directory / name
+            fake.write_text(content, encoding="utf-8")
+            fake.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}")
+        monkeypatch.delenv("HDSH_PREK_ALLOW_ORPHANED_HOOKS", raising=False)
+        install(str(main))
+        assert git("config", "--worktree", "core.hooksPath", cwd=main).stdout.strip() == (
+            hooks_path_of(main)
+        )
+        assert (Path(hooks_path_of(main)) / "pre-commit").is_file()
+
+    def test_a_taken_over_directory_is_not_rescanned(
+        self, worktrees: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        main = worktrees["main"]
+        install(str(main))
+        orphan = common_dir_of(main) / "hooks" / "pre-push"
+        orphan.write_text("#!/bin/sh\n# late plain hook\n", encoding="utf-8")
+        orphan.chmod(0o755)
+        monkeypatch.delenv("HDSH_PREK_ALLOW_ORPHANED_HOOKS")
+        install(str(main))
+        assert git("config", "--worktree", "core.hooksPath", cwd=main).stdout.strip() == (
+            hooks_path_of(main)
+        )
+
+    def test_declared_types_missing_their_shim_fail_the_install(
+        self, worktrees: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        main = worktrees["main"]
+        (main / "prek.toml").write_text(
+            'default_install_hook_types = ["pre-commit", "pre-push"]\n', encoding="utf-8"
+        )
+        monkeypatch.setenv("HDSH_TEST_DROP_TYPE", "pre-push")
+        with pytest.raises(WorktreeError, match="did not create the declared hook type"):
+            install(str(main))
+        assert git("config", "--worktree", "core.hooksPath", cwd=main, check=False).returncode == 1
+
+    def test_bare_install_without_a_config_stays_unvalidated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        main = _init_repo(tmp_path / "main")
+        bin_directory = tmp_path / "bin"
+        bin_directory.mkdir()
+        for name, content in (("prek", FAKE_PREK), ("uv", FAKE_UV)):
+            shim = bin_directory / name
+            shim.write_text(content, encoding="utf-8")
+            shim.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}")
+        install(str(main))
+        assert not (Path(hooks_path_of(main)) / "pre-commit").exists()

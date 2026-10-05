@@ -7,6 +7,8 @@ import re
 import stat
 import subprocess
 import sys
+import tomllib
+from collections.abc import Sequence
 from pathlib import Path
 
 from hdsh.worktree.git import WorktreeError, nul_values, run_git
@@ -547,15 +549,92 @@ def probe_pairing_merge_driver(root: str) -> str:
     raise WorktreeError(msg)
 
 
-def run_prek(root: str) -> None:
+#: prek installs this type when the consumer config declares no list.
+_PREK_DEFAULT_HOOK_TYPES = ("pre-commit",)
+
+
+def declared_hook_types(root: str) -> tuple[str, ...] | None:
+    """Read the hook types ``prek install`` must provide from prek.toml.
+
+    Args:
+        root: Repository root the consumer prek.toml lives in.
+
+    Returns:
+        The declared list (prek's own default ``pre-commit`` when the key is
+        absent), or ``None`` when no prek.toml exists — a yaml config's
+        declared list stays unread, so the install neither narrows it with
+        explicit flags nor validates against it.
+
+    Raises:
+        WorktreeError: When prek.toml is unreadable, invalid TOML, or declares
+            something other than a non-empty list of hook-type names.
+    """
+    path = Path(root, "prek.toml")
+    if not path.exists():
+        return None
+    try:
+        parsed = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        msg = f"prek.toml cannot be read ({error}); fix it, then rerun"
+        raise WorktreeError(msg) from error
+    declared = parsed.get("default_install_hook_types", list(_PREK_DEFAULT_HOOK_TYPES))
+    if (
+        not isinstance(declared, list)
+        or not declared
+        or not all(isinstance(item, str) and item for item in declared)
+    ):
+        msg = (
+            "prek.toml default_install_hook_types must be a non-empty list of "
+            f"hook-type names (found {declared!r})"
+        )
+        raise WorktreeError(msg)
+    return tuple(dict.fromkeys(declared))
+
+
+def assert_expected_hooks_installed(hooks_path: str, hook_types: Sequence[str]) -> None:
+    """Fail loud when prek left a declared hook type without its shim.
+
+    Args:
+        hooks_path: The owned directory prek installed into.
+        hook_types: The declared types that must each have a shim file.
+
+    Raises:
+        WorktreeError: Naming every declared type without a shim.
+    """
+    missing = [hook_type for hook_type in hook_types if not Path(hooks_path, hook_type).is_file()]
+    if missing:
+        msg = (
+            "prek install did not create the declared hook type(s) "
+            + ", ".join(missing)
+            + f" under {hooks_path}; upgrade prek or inspect its install "
+            "output, then rerun"
+        )
+        raise WorktreeError(msg)
+
+
+def run_prek(root: str, hook_types: Sequence[str] | None = None) -> None:
     """Run ``prek install --overwrite`` with command-scoped git config scrubbed.
+
+    The explicit ``--hook-type`` flags carry the whole declared list — prek's
+    flags replace ``default_install_hook_types`` rather than extend it, so a
+    partial list would narrow the install — making the install independent of
+    whether the running prek honors the TOML key. ``None`` stays bare: an
+    unreadable declared list must not be narrowed by guesswork.
+
+    Args:
+        root: Repository root prek installs in.
+        hook_types: The declared hook types, or ``None`` to let prek resolve
+            them from its own config.
 
     Raises:
         WorktreeError: When prek cannot start or exits unsuccessfully.
     """
+    command = ["prek", "install", "--overwrite"]
+    for hook_type in hook_types or ():
+        command.extend(("--hook-type", hook_type))
     try:
         result = subprocess.run(
-            ["prek", "install", "--overwrite"],
+            command,
             cwd=root,
             capture_output=True,
             text=True,
@@ -563,9 +642,9 @@ def run_prek(root: str) -> None:
             check=False,
         )
     except OSError as error:
-        msg = f"prek install --overwrite failed: {error}"
+        msg = f"prek install failed: {error}"
         raise WorktreeError(msg) from error
     if result.returncode != 0:
         detail = result.stderr.strip() or f"exit status {result.returncode}"
-        msg = f"prek install --overwrite failed: {detail}"
+        msg = f"prek install failed: {detail}"
         raise WorktreeError(msg)

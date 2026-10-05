@@ -1,10 +1,12 @@
-"""Derivation, binding, and preflight for the guided adoption wizard.
+"""Derivation, binding, preflight, and the Phase 1 checklist for adoption.
 
 Every parameter a consumer cannot know from the command line derives here,
 through one injectable transport so the hermetic suite proves each path
 offline. Each derivation is echoed — a resolved default the operator never
 saw is a silent failure waiting to happen — and every flag remains an
-explicit override, so a fully explicit run never touches the network.
+explicit override, so a fully explicit run never touches the network. The
+checklist leaf prints the out-of-git Phase 1 enumeration the adoption manual
+otherwise only names.
 """
 
 from __future__ import annotations
@@ -21,7 +23,8 @@ if TYPE_CHECKING:
 
     from hdsh import cliargs
 
-from hdsh.adopt.corpus import HDSH_REPOSITORY
+from hdsh.adopt.corpus import HDSH_REPOSITORY, STANDARD_STATUSES
+from hdsh.policy import rules
 
 TOOL = "hdsh adopt"
 
@@ -255,22 +258,59 @@ def resolve_lifecycle_actor(explicit: str | None, transport: Transport | None) -
     return Resolution(login, DERIVED, f"--lifecycle-actor {login} (derived from the gh identity)")
 
 
-def preflight(transport: Transport | None) -> list[str]:
+#: gh reports the authenticated token's scopes on lines of this form.
+_GH_SCOPE_LINE = "Token scopes: "
+
+_PROJECT_SCOPE_NOTICE = (
+    "gh token lacks the 'project' scope; creating the Phase 1 board needs it — "
+    "run gh auth refresh -s project (advisory: the workflows' own credentials "
+    "are unaffected)"
+)
+
+
+def gh_project_scope_notice(gh_auth_stdout: str) -> str | None:
+    """The advisory for disclosed scope lines that never mention ``project``.
+
+    Args:
+        gh_auth_stdout: The stdout of a successful ``gh auth status`` probe.
+
+    Returns:
+        The advisory naming the remedy, or ``None`` when the token carries
+        ``project`` or gh disclosed no scope line to judge — a format the
+        parser does not recognize is never guessed at.
+    """
+    disclosed = []
+    for line in gh_auth_stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(_GH_SCOPE_LINE):
+            disclosed.append(stripped.removeprefix(_GH_SCOPE_LINE))
+    if not disclosed or any("project" in line for line in disclosed):
+        return None
+    return _PROJECT_SCOPE_NOTICE
+
+
+def preflight(transport: Transport | None) -> tuple[list[str], list[str]]:
     """Run the local-toolchain preflight layer, one diagnostic per failure.
 
     Args:
         transport: Injected command results for the hermetic suite.
 
     Returns:
-        The failure diagnostics; empty means the layer passed.
+        The ``(failures, notices)`` pair: failures block adoption, notices
+        advise on out-of-toolchain setup the operator may still need.
     """
     failures: list[str] = []
+    notices: list[str] = []
     git_version = _run(["git", "--version"], transport)
     if git_version.returncode != 0:
         failures.append("git is not runnable; install Git 2.26 or newer")
     gh_auth = _run(["gh", "auth", "status"], transport)
     if gh_auth.returncode != 0:
         failures.append(_gh_failure_detail(gh_auth, "gh auth status"))
+    else:
+        notice = gh_project_scope_notice(gh_auth.stdout)
+        if notice is not None:
+            notices.append(notice)
     hdsh = _run(["hdsh", "--version"], transport)
     if hdsh.returncode != 0:
         failures.append(
@@ -281,22 +321,80 @@ def preflight(transport: Transport | None) -> list[str]:
     rg_version = _run(["rg", "--version"], transport)
     if rg_version.returncode != 0:
         failures.append("ripgrep is not runnable on PATH; install ripgrep (the rg command)")
-    return failures
+    return failures, notices
+
+
+def checklist_lines() -> list[str]:
+    """Render the Phase 1 label and board enumeration as copy-pasteable commands."""
+    lines = [f"{TOOL}: Phase 1 out-of-git checklist — labels and the Project board"]
+    lines.append("labels:")
+    lines.extend(
+        f'  gh label create {name} --description "{description}"'
+        for name, description in rules.LABEL_DESCRIPTIONS.items()
+        if name.startswith("kind/")
+    )
+    lines.append("  user accounts also carry the Issue classification on type/* labels:")
+    lines.extend(
+        f'  gh label create {name} --description "{description}"'
+        for name, description in rules.LABEL_DESCRIPTIONS.items()
+        if name.startswith("type/")
+    )
+    lines.extend(
+        f'  gh label create {name} --description "{description}"'
+        for name, description in rules.LABEL_DESCRIPTIONS.items()
+        if name in rules.PRIORITIES
+    )
+    lines.append(
+        "  area/* labels are consumer-specific: create the initial set for the touched areas"
+    )
+    lines.append("board (its number is --project-number, its title is --project-title):")
+    lines.append("  gh project create --title <title> --owner <owner>")
+    lines.append("  gh project link <number> --owner <owner> --repository <repository>")
+    lines.append(
+        "  statuses on the built-in Status field: "
+        + ", ".join(STANDARD_STATUSES)
+        + " — gh cannot edit those options; set them in the board UI"
+    )
+    lines.append(
+        "  gh project field-create <number> --owner <owner> --name Priority "
+        '--data-type SINGLE_SELECT --single-select-options "' + ",".join(rules.PRIORITIES) + '"'
+    )
+    lines.append(
+        '  gh project field-create <number> --owner <owner> --name "Start date" --data-type DATE'
+    )
+    lines.append(
+        "operator token: board and label work needs the project scope — gh auth refresh -s project"
+    )
+    lines.append("branch protection: require one approval before merge")
+    return lines
 
 
 def register(subparsers: cliargs.CommandSubparsers) -> None:
-    """Register the ``preflight`` command leaf."""
+    """Register the ``preflight`` and ``checklist`` command leaves."""
     parser = subparsers.add_parser("preflight", help="check the local adoption toolchain")
     parser.set_defaults(handler=main)
+    checklist = subparsers.add_parser(
+        "checklist", help="print the Phase 1 label and board enumeration"
+    )
+    checklist.set_defaults(handler=checklist_main)
 
 
 def main(args: argparse.Namespace) -> int:  # noqa: ARG001
     """``hdsh adopt preflight`` entry point."""
-    failures = preflight(None)
+    failures, notices = preflight(None)
+    for notice in notices:
+        print(f"{TOOL}: {notice}")
     for failure in failures:
         print(f"{TOOL}: {failure}", file=sys.stderr)
     if failures:
         print(f"{TOOL}: {len(failures)} preflight failure(s)", file=sys.stderr)
         return 1
     print(f"{TOOL}: local toolchain ready (git, gh authenticated, bare hdsh on PATH, rg on PATH)")
+    return 0
+
+
+def checklist_main(_args: argparse.Namespace) -> int:
+    """``hdsh adopt checklist`` entry point."""
+    for line in checklist_lines():
+        print(line)
     return 0

@@ -39,6 +39,10 @@ runs:
     - name: Resolve deployment flavor and credentials
       # The checked-out config decides which credential flavor must exist;
       # the later `||` selections are proven by this step, not silent defaults.
+      # A config absent from the default branch skips only for the pull
+      # request that introduces it (the first-adoption bootstrap): there is
+      # no policy to validate against until that pull request merges, and
+      # every other absence fails loud as drift.
       id: flavor
       if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
       shell: bash
@@ -47,10 +51,12 @@ runs:
         PROJECT_TOKEN: ${{ inputs.project-token }}
         APP_CLIENT_ID: ${{ inputs.app-client-id }}
         APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number || '' }}
       run: python ${{ github.action_path }}/scripts/flavor.py "Issue policy"
     - name: Create Project read token
       id: app-token
-      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.account-type == 'organization' }}
+      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.skip != 'true' && steps.flavor.outputs.account-type == 'organization' }}
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
       with:
         client-id: ${{ inputs.app-client-id }}
@@ -60,7 +66,7 @@ runs:
         permission-issues: read
         permission-organization-projects: read
     - name: Validate pull request
-      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
+      if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.skip != 'true' }}
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}

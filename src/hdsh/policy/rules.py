@@ -35,6 +35,25 @@ PR_KINDS = frozenset(
         "kind/dependency",
     }
 )
+#: The Phase 1 label taxonomy with the one-line descriptions ``gh label
+#: create --description`` carries; the priorities double as the options of
+#: the board's single-select Priority field.
+LABEL_DESCRIPTIONS: dict[str, str] = {
+    "kind/feature": "Pull request adds or changes user- or model-facing capability",
+    "kind/bug-fix": "Pull request corrects a defect",
+    "kind/doc": "Pull request changes documentation",
+    "kind/testing": "Pull request changes tests or test infrastructure",
+    "kind/cleanup": "Pull request simplifies without changing behavior",
+    "kind/dependency": "Pull request changes dependencies",
+    **{
+        f"type/{name.lower()}": f"Issue classification: {name}"
+        for name in ("Idea", "Feature", "Bug", "Research", "Task")
+    },
+    "p0": "Priority 0 (highest)",
+    "p1": "Priority 1",
+    "p2": "Priority 2",
+    "p3": "Priority 3 (lowest)",
+}
 IMPLEMENTATION_PULL_REQUEST_ACTIONS = frozenset(
     {"opened", "edited", "synchronize", "reopened", "labeled", "unlabeled"}
 )
