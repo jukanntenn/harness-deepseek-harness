@@ -27,7 +27,7 @@ def common_config(repo: Repo) -> Path:
 def no_prek(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the probe and prek invocation; config guards are under test."""
 
-    def skipped(root: str) -> None:
+    def skipped(root: str, hook_types: object = None) -> None:
         return None
 
     def resolved(root: str) -> str:
@@ -234,7 +234,7 @@ class TestEnvironmentScrub:
     def test_run_prek_failure_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completed = subprocess.CompletedProcess(["prek"], 1, "", "boom\n")
         monkeypatch.setattr(subprocess, "run", completed_run(completed))
-        with pytest.raises(WorktreeError, match="prek install --overwrite failed: boom"):
+        with pytest.raises(WorktreeError, match="prek install failed: boom"):
             worktree_config.run_prek("/repo")
 
     def test_run_prek_failure_without_stderr_names_status(
@@ -524,3 +524,85 @@ class TestConfigEdges:
         completed = subprocess.CompletedProcess(["prek"], 0, "", "")
         monkeypatch.setattr(subprocess, "run", completed_run(completed))
         worktree_config.run_prek("/repo")
+
+
+class TestHookTypeContract:
+    def test_prek_toml_declared_types_are_read(self, repo: Repo) -> None:
+        (repo.root / "prek.toml").write_text(
+            'default_install_hook_types = ["pre-commit", "pre-push"]\n', encoding="utf-8"
+        )
+        assert worktree_config.declared_hook_types(str(repo.root)) == ("pre-commit", "pre-push")
+
+    def test_an_absent_key_defaults_to_pre_commit(self, repo: Repo) -> None:
+        (repo.root / "prek.toml").write_text('[[repos]]\nrepo = "builtin"\n', encoding="utf-8")
+        assert worktree_config.declared_hook_types(str(repo.root)) == ("pre-commit",)
+
+    def test_an_absent_config_is_unknown(self, repo: Repo) -> None:
+        assert worktree_config.declared_hook_types(str(repo.root)) is None
+
+    def test_duplicate_declarations_collapse(self, repo: Repo) -> None:
+        (repo.root / "prek.toml").write_text(
+            'default_install_hook_types = ["pre-push", "pre-push"]\n', encoding="utf-8"
+        )
+        assert worktree_config.declared_hook_types(str(repo.root)) == ("pre-push",)
+
+    def test_invalid_toml_fails_loud(self, repo: Repo) -> None:
+        (repo.root / "prek.toml").write_text("not toml [", encoding="utf-8")
+        with pytest.raises(WorktreeError, match="prek.toml cannot be read"):
+            worktree_config.declared_hook_types(str(repo.root))
+
+    @pytest.mark.parametrize("declared", ["[]", '["pre-commit", 3]', "'pre-commit'"])
+    def test_malformed_declarations_fail_loud(self, repo: Repo, declared: str) -> None:
+        (repo.root / "prek.toml").write_text(
+            f"default_install_hook_types = {declared}\n", encoding="utf-8"
+        )
+        with pytest.raises(WorktreeError, match="must be a non-empty list"):
+            worktree_config.declared_hook_types(str(repo.root))
+
+    def test_run_prek_carries_the_declared_types_as_flags(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        commands: list[list[str]] = []
+
+        def recording_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", recording_run)
+        worktree_config.run_prek("/repo", ("pre-commit", "pre-push"))
+        assert commands == [
+            [
+                "prek",
+                "install",
+                "--overwrite",
+                "--hook-type",
+                "pre-commit",
+                "--hook-type",
+                "pre-push",
+            ]
+        ]
+
+    def test_run_prek_without_types_stays_bare(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        commands: list[list[str]] = []
+
+        def recording_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", recording_run)
+        worktree_config.run_prek("/repo", None)
+        assert commands == [["prek", "install", "--overwrite"]]
+
+    def test_every_declared_type_needs_its_shim(self, tmp_path: Path) -> None:
+        (tmp_path / "pre-commit").write_text("#!/bin/sh\n", encoding="utf-8")
+        with pytest.raises(
+            WorktreeError, match=r"did not create the declared hook type\(s\) pre-push"
+        ):
+            worktree_config.assert_expected_hooks_installed(
+                str(tmp_path), ("pre-commit", "pre-push")
+            )
+
+    def test_present_shims_pass(self, tmp_path: Path) -> None:
+        (tmp_path / "pre-commit").write_text("#!/bin/sh\n", encoding="utf-8")
+        (tmp_path / "pre-push").write_text("#!/bin/sh\n", encoding="utf-8")
+        worktree_config.assert_expected_hooks_installed(str(tmp_path), ("pre-commit", "pre-push"))

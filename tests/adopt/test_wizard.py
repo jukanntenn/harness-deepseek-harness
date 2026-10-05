@@ -188,8 +188,8 @@ class TestPreflightMain:
     def test_main_prints_one_line_per_failure_and_exits_one(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        def one_failure(transport: wizard.Transport | None) -> list[str]:
-            return ["gh is not authenticated; run gh auth login"]
+        def one_failure(transport: wizard.Transport | None) -> tuple[list[str], list[str]]:
+            return ["gh is not authenticated; run gh auth login"], []
 
         monkeypatch.setattr(wizard, "preflight", one_failure)
         from tests.helpers import parse_command
@@ -205,8 +205,8 @@ class TestPreflightMain:
     def test_main_reports_a_ready_toolchain(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        def no_failures(transport: wizard.Transport | None) -> list[str]:
-            return []
+        def no_failures(transport: wizard.Transport | None) -> tuple[list[str], list[str]]:
+            return [], []
 
         monkeypatch.setattr(wizard, "preflight", no_failures)
         from tests.helpers import parse_command
@@ -229,15 +229,16 @@ class TestPreflight:
     )
 
     def test_a_ready_toolchain_reports_nothing(self) -> None:
-        assert wizard.preflight(self.READY) == []
+        assert wizard.preflight(self.READY) == ([], [])
 
     def test_each_absent_tool_is_one_diagnostic(self) -> None:
-        failures = wizard.preflight({})
+        failures, notices = wizard.preflight({})
         assert len(failures) == 4
         assert any("git is not runnable" in line for line in failures)
         assert any("gh is not runnable" in line for line in failures)
         assert any("bare hdsh is not runnable" in line for line in failures)
         assert any("ripgrep is not runnable" in line for line in failures)
+        assert notices == []
 
     def test_a_rejected_credential_still_names_the_login_remedy(self) -> None:
         rejected = {
@@ -249,7 +250,7 @@ class TestPreflight:
                 stderr="You are not logged into any GitHub hosts. Run gh auth login.\n",
             ),
         }
-        failures = wizard.preflight(rejected)
+        failures, _ = wizard.preflight(rejected)
         assert failures == ["gh is not authenticated; run gh auth login"]
 
     def test_a_preflight_probe_failure_is_never_read_as_a_missing_credential(self) -> None:
@@ -262,7 +263,7 @@ class TestPreflight:
                 stderr="gh: error connecting to api.github.com:\n    dial tcp: no route\n",
             ),
         }
-        failures = wizard.preflight(unreachable)
+        failures, _ = wizard.preflight(unreachable)
         assert failures == [
             (
                 "the gh probe failed (gh auth status exited 1: gh: error connecting to "
@@ -271,7 +272,115 @@ class TestPreflight:
         ]
 
     def test_the_hdsh_remediation_names_the_git_install_form(self) -> None:
-        failures = wizard.preflight(
+        failures, _ = wizard.preflight(
             {key: value for key, value in self.READY.items() if key != "hdsh --version"}
         )
         assert any("git+<url>@<ref>" in line for line in failures)
+
+    def test_a_scopeless_token_earns_the_refresh_notice(self) -> None:
+        results = {
+            **{key: value for key, value in self.READY.items() if key != "gh auth status"},
+            "gh auth status": subprocess.CompletedProcess(
+                ["gh", "auth", "status"],
+                0,
+                stdout="github.com\n  Token scopes: 'gist', 'read:org', 'repo'\n",
+                stderr="",
+            ),
+        }
+        failures, notices = wizard.preflight(results)
+        assert failures == []
+        assert notices == [
+            (
+                "gh token lacks the 'project' scope; creating the Phase 1 board needs it — "
+                "run gh auth refresh -s project (advisory: the workflows' own credentials "
+                "are unaffected)"
+            )
+        ]
+
+    def test_a_token_already_carrying_project_earns_no_notice(self) -> None:
+        results = {
+            **{key: value for key, value in self.READY.items() if key != "gh auth status"},
+            "gh auth status": subprocess.CompletedProcess(
+                ["gh", "auth", "status"],
+                0,
+                stdout="github.com\n  Token scopes: 'project', 'repo'\n",
+                stderr="",
+            ),
+        }
+        assert wizard.preflight(results) == ([], [])
+
+
+class TestProjectScopeNotice:
+    def test_disclosed_scopes_without_project_advise_the_refresh(self) -> None:
+        notice = wizard.gh_project_scope_notice("  Token scopes: 'gist', 'repo'")
+        assert notice is not None
+        assert "gh auth refresh -s project" in notice
+
+    def test_no_disclosed_scopes_stay_silent(self) -> None:
+        assert wizard.gh_project_scope_notice("Logged in to github.com") is None
+        assert wizard.gh_project_scope_notice("") is None
+
+    def test_any_mention_of_project_counts(self) -> None:
+        assert wizard.gh_project_scope_notice("Token scopes: read:project, repo") is None
+
+
+class TestChecklist:
+    def test_every_taxonomy_label_prints_with_its_command(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from hdsh.policy import rules
+        from tests.helpers import parse_command
+
+        parsed = parse_command(wizard.register, ["checklist"])
+        assert wizard.checklist_main(parsed) == 0
+        output = capsys.readouterr().out
+        for name, description in rules.LABEL_DESCRIPTIONS.items():
+            assert f'gh label create {name} --description "{description}"' in output
+        assert "user accounts also carry the Issue classification on type/* labels" in output
+        assert "area/* labels are consumer-specific" in output
+
+    def test_the_board_enumeration_prints_statuses_and_fields(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from hdsh.adopt.corpus import STANDARD_STATUSES
+        from tests.helpers import parse_command
+
+        parsed = parse_command(wizard.register, ["checklist"])
+        assert wizard.checklist_main(parsed) == 0
+        output = capsys.readouterr().out
+        assert all(status in output for status in STANDARD_STATUSES)
+        assert "gh cannot edit those options; set them in the board UI" in output
+        field_create = (
+            '--name Priority --data-type SINGLE_SELECT --single-select-options "p0,p1,p2,p3"'
+        )
+        assert field_create in output
+        assert '--name "Start date" --data-type DATE' in output
+        assert "gh project create --title <title> --owner <owner>" in output
+        assert "gh project link <number> --owner <owner> --repository <repository>" in output
+        assert "gh auth refresh -s project" in output
+
+    def test_the_taxonomy_covers_exactly_the_closed_sets(self) -> None:
+        from hdsh.policy import rules
+
+        assert set(rules.LABEL_DESCRIPTIONS) == set(rules.PR_KINDS) | set(rules.TYPE_LABELS) | set(
+            rules.PRIORITIES
+        )
+
+
+class TestPreflightNotices:
+    def test_main_prints_advisories_without_failing(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def advisory_only(transport: wizard.Transport | None) -> tuple[list[str], list[str]]:
+            return [], ["gh token lacks the 'project' scope"]
+
+        monkeypatch.setattr(wizard, "preflight", advisory_only)
+        from tests.helpers import parse_command
+
+        request = parse_command(wizard.register, ["preflight"])
+        from hdsh.adopt.wizard import main
+
+        assert main(request) == 0
+        captured = capsys.readouterr()
+        assert "gh token lacks the 'project' scope" in captured.out
+        assert captured.err == ""

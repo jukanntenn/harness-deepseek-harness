@@ -95,8 +95,8 @@ class TestApplyRoundTrip:
     ) -> None:
         assert apply_cli(*adopt_arguments()) == 0
         output = capsys.readouterr().out
-        assert "installed 61 file(s); recorded 13 pair(s)" in output
-        assert "pairing corpus after apply: 14 English document(s) in scope" in output
+        assert "installed 63 file(s); recorded 14 pair(s)" in output
+        assert "pairing corpus after apply: 15 English document(s) in scope" in output
         assert (consumer.root / ".agents" / "skills" / "pushing" / "SKILL.md").is_file()
         assert (consumer.root / ".github" / "actionlint.yaml").is_file()
         actionlint = (consumer.root / ".github" / "actionlint.yaml").read_text(encoding="utf-8")
@@ -176,7 +176,7 @@ class TestApplyRoundTrip:
         )
         assert not (consumer.root / "docs" / "development.zh.md").exists()
         assert not (consumer.root / "docs" / "development.i18n.yaml").exists()
-        assert "recorded 12 pair(s)" in output
+        assert "recorded 13 pair(s)" in output
         assert "1 still need a Chinese counterpart and a record" in output
         manifest = json.loads(
             (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
@@ -200,7 +200,7 @@ class TestApplyRoundTrip:
         )
         assert not (consumer.root / "docs" / "architecture.md").exists()
         assert not (consumer.root / "docs" / "architecture.i18n.yaml").exists()
-        assert "recorded 12 pair(s)" in output
+        assert "recorded 13 pair(s)" in output
 
     def test_an_adopt_installed_template_pair_still_records_on_reapply(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
@@ -209,7 +209,7 @@ class TestApplyRoundTrip:
         commit_all(consumer, "adopted")
         assert apply_cli(*adopt_arguments()) == 0
         output = capsys.readouterr().out
-        assert "recorded 13 pair(s)" in output
+        assert "recorded 14 pair(s)" in output
         assert (consumer.root / "docs" / "development.i18n.yaml").is_file()
 
     def test_organization_flavor_renders_app_credentials(self, consumer: Repo) -> None:

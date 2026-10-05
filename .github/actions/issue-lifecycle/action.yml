@@ -45,7 +45,9 @@ runs:
       # Organization deployments authenticate REST and GraphQL with one GitHub
       # App token; user deployments cannot grant an App access to user-owned
       # Projects, so REST runs on github-token and GraphQL on the PAT behind
-      # the project-token input.
+      # the project-token input. A config absent from the default branch skips
+      # only for the pull request that introduces it (the first-adoption
+      # bootstrap); every other absence fails loud as drift.
       id: flavor
       if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
       shell: bash
@@ -54,10 +56,12 @@ runs:
         PROJECT_TOKEN: ${{ inputs.project-token }}
         APP_CLIENT_ID: ${{ inputs.app-client-id }}
         APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number || '' }}
       run: python ${{ github.action_path }}/scripts/flavor.py "Issue lifecycle"
     - name: Create project token
       id: app-token
-      if: ${{ (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.flavor.outputs.account-type == 'organization' }}
+      if: ${{ (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.flavor.outputs.skip != 'true' && steps.flavor.outputs.account-type == 'organization' }}
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
       with:
         client-id: ${{ inputs.app-client-id }}
@@ -65,7 +69,7 @@ runs:
         owner: ${{ github.repository_owner }}
         repositories: ${{ github.event.repository.name }}
     - name: Handle repository event
-      if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+      if: ${{ (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.flavor.outputs.skip != 'true' }}
       shell: bash
       env:
         GH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}

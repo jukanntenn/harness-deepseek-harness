@@ -28,15 +28,29 @@ jobs:
       - name: Resolve deployment flavor and credentials
         # The accountType in the checked-out config decides which credential
         # flavor must exist; the later `||` selections are proven by this step,
-        # not silent defaults.
+        # not silent defaults. A config absent from the default branch skips
+        # only for the pull request that introduces it (the first-adoption
+        # bootstrap): there is no policy to validate against until that pull
+        # request merges, and every other absence fails loud as drift.
         id: flavor
         if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
         env:
           APP_CLIENT_ID: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
           APP_PRIVATE_KEY: ${{ secrets.HDSH_ISSUE_APP_PRIVATE_KEY }}
           PROJECT_PAT: ${{ secrets.HDSH_PROJECT_PAT }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
         run: |
           set -eu
+          if [ ! -f .github/issue-management/config.json ]; then
+            if [ -n "$PR_NUMBER" ] && gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' | grep -Fxq '.github/issue-management/config.json'; then
+              echo "::notice title=Issue policy bootstrap::no policy config on the default branch yet; this pull request introduces it, so validation starts after merge"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error title=Issue policy config::.github/issue-management/config.json is absent from the default branch checkout" >&2
+            exit 1
+          fi
           flavor=$(jq -r .accountType .github/issue-management/config.json)
           case "$flavor" in
             organization)
@@ -59,7 +73,7 @@ jobs:
           echo "account-type=$flavor" >> "$GITHUB_OUTPUT"
       - name: Create Project read token
         id: app-token
-        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.account-type == 'organization' }}
+        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.skip != 'true' && steps.flavor.outputs.account-type == 'organization' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v2.2.2
         with:
           client-id: ${{ vars.HDSH_ISSUE_APP_CLIENT_ID }}
@@ -69,7 +83,7 @@ jobs:
           permission-issues: read
           permission-organization-projects: read
       - name: Validate pull request
-        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
+        if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' && steps.flavor.outputs.skip != 'true' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PROJECT_TOKEN: ${{ steps.app-token.outputs.token || secrets.HDSH_PROJECT_PAT }}

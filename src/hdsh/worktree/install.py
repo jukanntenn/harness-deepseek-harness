@@ -2,10 +2,13 @@
 
 Each git worktree gets its own hook directory inside its private git dir, so
 parallel worktrees never share hook state. The installer refuses to mask or
-replace user-owned configuration: an inherited ``core.hooksPath`` or a foreign
-pairing merge-driver entry fails loud unless explicitly overridden, and every
+replace user-owned configuration: an inherited ``core.hooksPath``, a foreign
+pairing merge-driver entry, or an active plain hook the takeover would
+silently stop running fails loud unless explicitly overridden, and every
 owned change is rolled back when a later step fails. ``prek install`` writes
-its shims into the worktree-local hooks path it honors natively.
+its shims into the worktree-local hooks path it honors natively, carrying the
+consumer-declared hook types explicitly, and the declared types are proven
+installed before the takeover commits.
 """
 
 from __future__ import annotations
@@ -19,8 +22,10 @@ from typing import TYPE_CHECKING, NoReturn
 from hdsh.worktree.config import (
     apply_worktree_config_migration,
     assert_common_config_file,
+    assert_expected_hooks_installed,
     assert_single,
     assert_worktree_config_files,
+    declared_hook_types,
     effective_config_entry,
     included_config_entries,
     install_pairing_merge_driver,
@@ -36,6 +41,7 @@ from hdsh.worktree.git import WorktreeError, run_git, strip_git_line_terminator
 from hdsh.worktree.ownership import (
     HOOKS_DIRECTORY,
     acquire_install_lock,
+    active_plain_hooks,
     assert_supported_git,
     ensure_owned_hooks_directory,
     inspect_owned_hooks_directory,
@@ -50,6 +56,7 @@ if TYPE_CHECKING:
     from hdsh import cliargs
 
 ALLOW_HOOKS_PATH_OVERRIDE = "HDSH_PREK_ALLOW_HOOKS_PATH_OVERRIDE"
+ALLOW_ORPHANED_HOOKS = "HDSH_PREK_ALLOW_ORPHANED_HOOKS"
 TOOL = "hdsh worktree install"
 _KNOWN_INHERITED_SCOPES = ("system", "global", "local")
 _REPLACEABLE_SCOPES = ("command", "worktree")
@@ -96,6 +103,38 @@ def _is_registered_owned_hooks_path(common_directory: str, hooks_path: str) -> b
         return False
     inspected = inspect_owned_hooks_directory(hooks_path)
     return inspected is not None and inspected["hooksPath"] == hooks_path
+
+
+def _refuse_orphaned_plain_hooks(root: str) -> None:
+    """Fail loud when the takeover would silently stop running plain hooks.
+
+    Moving ``core.hooksPath`` to the owned directory abandons whatever active
+    hooks the default directory holds — the exact silent-gate-loss mode the
+    installer exists to prevent — so each one must be chained through
+    prek.toml or explicitly acknowledged.
+
+    Raises:
+        WorktreeError: When an active plain hook exists and the acknowledgment
+            environment variable is unset.
+    """
+    if os.environ.get(ALLOW_ORPHANED_HOOKS) == "1":
+        return
+    default_hooks = strip_git_line_terminator(
+        run_git(root, ["rev-parse", "--git-path", "hooks"]).stdout
+    )
+    resolved = (
+        default_hooks if Path(default_hooks).is_absolute() else str(Path(root, default_hooks))
+    )
+    orphans = active_plain_hooks(resolved)
+    if orphans:
+        msg = (
+            f"refusing to orphan the active hook(s) {', '.join(orphans)} in {resolved}: "
+            "moving core.hooksPath stops git from running them. Chain each one "
+            "through prek.toml (a hook entry at its stage plus "
+            "default_install_hook_types), remove it, or rerun with "
+            f"{ALLOW_ORPHANED_HOOKS}=1 to acknowledge that it stops running"
+        )
+        raise WorktreeError(msg)
 
 
 def install(root: str) -> str:
@@ -193,6 +232,8 @@ def install(root: str) -> str:
                     _refuse_scoped_hooks_path(effective)
                 if os.environ.get(ALLOW_HOOKS_PATH_OVERRIDE) != "1":
                     _refuse_inherited_hooks_path(effective)
+        else:
+            _refuse_orphaned_plain_hooks(root)
         migration = plan_worktree_config_migration(root, common_config_path)
         marker_path = ensure_owned_hooks_directory(hooks_path)
         owned_hooks_directory = parse_ownership_marker(
@@ -228,7 +269,10 @@ def install(root: str) -> str:
                     "direct worktree value"
                 )
                 raise WorktreeError(msg)
-            run_prek(root)
+            expected_hook_types = declared_hook_types(root)
+            run_prek(root, expected_hook_types)
+            if expected_hook_types is not None:
+                assert_expected_hooks_installed(hooks_path, expected_hook_types)
             update_ownership_marker(marker_path, hooks_path)
         except Exception as error:
             rollback_errors: list[Exception] = []
