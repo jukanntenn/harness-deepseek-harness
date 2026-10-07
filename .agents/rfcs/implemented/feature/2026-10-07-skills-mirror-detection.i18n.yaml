@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/feature/2026-10-07-skills-mirror-detection.md
+2026-10-07-skills-mirror-detection.md: 2beed3f0bc1daeb410be0fff88a21acf7e7937f9
+2026-10-07-skills-mirror-detection.zh.md: 929c25058fe61153cadacf8145a47585225ba15d
