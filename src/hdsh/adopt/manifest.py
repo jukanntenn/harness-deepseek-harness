@@ -49,6 +49,12 @@ class AdoptManifest:
     #: to. Verify compares it against ``config.json`` — a mismatch means the
     #: consumer moved boards, and only an explicit rebind clears it.
     project_anchor: int = 0
+    #: The adoption date in ``yyyy-mm-dd`` form, as derived in the Project
+    #: time zone at first apply. The adopt-RFC anchor and its corpus links
+    #: derive from it, so re-application reuses the recorded date instead of
+    #: minting a second dated triplet. Empty only in manifests older than
+    #: the field; the next apply records the derived date.
+    adopt_date: str = ""
 
 
 class ManifestError(ValueError):
@@ -97,6 +103,7 @@ def load_manifest(root: str) -> AdoptManifest:
     slot_templates = value.get("slotTemplates", [])
     slot_guidance = value.get("slotGuidance", {})
     project_anchor = value.get("projectAnchor", 0)
+    adopt_date = value.get("adoptDate", "")
     if not isinstance(hdsh_version, str) or not isinstance(hdsh_ref, str):
         msg = f"{MANIFEST_PATH} requires string hdshVersion and hdshRef fields"
         raise ManifestError(msg)
@@ -138,6 +145,9 @@ def load_manifest(root: str) -> AdoptManifest:
     ):
         msg = f"{MANIFEST_PATH} requires a slotGuidance object of path to slot digests"
         raise ManifestError(msg)
+    if not isinstance(adopt_date, str):
+        msg = f"{MANIFEST_PATH} requires a string adoptDate"
+        raise ManifestError(msg)
     return AdoptManifest(
         hdsh_version=hdsh_version,
         hdsh_ref=hdsh_ref,
@@ -148,6 +158,7 @@ def load_manifest(root: str) -> AdoptManifest:
         slot_templates=tuple(slot_templates),
         slot_guidance={dest: dict(slots) for dest, slots in slot_guidance.items()},
         project_anchor=project_anchor,
+        adopt_date=adopt_date,
     )
 
 
@@ -167,6 +178,7 @@ def save_manifest(root: str, manifest: AdoptManifest) -> None:
         "consumerConfig": sorted(manifest.consumer_config),
         "slotTemplates": sorted(manifest.slot_templates),
         "projectAnchor": manifest.project_anchor,
+        "adoptDate": manifest.adopt_date,
         "slotGuidance": {
             dest: dict(sorted(slots.items()))
             for dest, slots in sorted(manifest.slot_guidance.items())
