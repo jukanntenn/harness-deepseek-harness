@@ -243,3 +243,98 @@ class TestBootstrapSkip:
         )
         assert completed.returncode == 1
         assert "cannot determine whether the pull request introduces" in completed.stderr
+
+
+class TestReplacementSkip:
+    @pytest.mark.parametrize("script", _SCRIPTS)
+    def test_a_replacing_pull_request_over_a_foreign_schema_skips(
+        self, script: Path, tmp_path: Path, files_api: Any
+    ) -> None:
+        root = files_api({"/repos/o/r/pulls/11/files?per_page=100": [{"filename": _CONFIG_PATH}]})
+        completed = run_flavor(
+            script,
+            tmp_path,
+            config='{"schema": "legacy"}',
+            environment={
+                "PR_NUMBER": "11",
+                "GH_TOKEN": "token",
+                "GITHUB_REPOSITORY": "o/r",
+                "GITHUB_API_URL": root,
+            },
+        )
+        assert completed.returncode == 0
+        assert "bootstrap" in completed.stdout
+        assert "this pull request replaces it" in completed.stdout
+        assert "skip=true" in completed.output_text
+        assert "account-type" not in completed.output_text
+
+    @pytest.mark.parametrize("script", _SCRIPTS)
+    def test_a_foreign_schema_without_a_replacing_pull_request_stays_loud(
+        self, script: Path, tmp_path: Path, files_api: Any
+    ) -> None:
+        root = files_api({"/repos/o/r/pulls/12/files?per_page=100": [{"filename": "README.md"}]})
+        completed = run_flavor(
+            script,
+            tmp_path,
+            config='{"schema": "legacy"}',
+            environment={
+                "PR_NUMBER": "12",
+                "GH_TOKEN": "token",
+                "GITHUB_REPOSITORY": "o/r",
+                "GITHUB_API_URL": root,
+            },
+        )
+        assert completed.returncode == 1
+        assert "is not an hdsh policy config" in completed.stderr
+        assert "unknown accountType 'None'" in completed.stderr
+        assert completed.output_text == ""
+
+    @pytest.mark.parametrize("script", _SCRIPTS)
+    def test_a_foreign_schema_without_pull_request_context_stays_loud(
+        self, script: Path, tmp_path: Path
+    ) -> None:
+        completed = run_flavor(script, tmp_path, config='{"schema": "legacy"}', environment={})
+        assert completed.returncode == 1
+        assert "is not an hdsh policy config" in completed.stderr
+        assert completed.output_text == ""
+
+    @pytest.mark.parametrize("script", _SCRIPTS)
+    def test_an_unparseable_config_replaced_by_the_pull_request_skips(
+        self, script: Path, tmp_path: Path, files_api: Any
+    ) -> None:
+        root = files_api({"/repos/o/r/pulls/13/files?per_page=100": [{"filename": _CONFIG_PATH}]})
+        completed = run_flavor(
+            script,
+            tmp_path,
+            config='{"accountType": "user", "trailing"',
+            environment={
+                "PR_NUMBER": "13",
+                "GH_TOKEN": "token",
+                "GITHUB_REPOSITORY": "o/r",
+                "GITHUB_API_URL": root,
+            },
+        )
+        assert completed.returncode == 0
+        assert "bootstrap" in completed.stdout
+        assert "skip=true" in completed.output_text
+
+    @pytest.mark.parametrize("script", _SCRIPTS)
+    def test_an_unparseable_config_without_a_replacing_pull_request_stays_loud(
+        self, script: Path, tmp_path: Path, files_api: Any
+    ) -> None:
+        root = files_api({"/repos/o/r/pulls/14/files?per_page=100": [{"filename": "README.md"}]})
+        completed = run_flavor(
+            script,
+            tmp_path,
+            config='{"accountType": "user", "trailing"',
+            environment={
+                "PR_NUMBER": "14",
+                "GH_TOKEN": "token",
+                "GITHUB_REPOSITORY": "o/r",
+                "GITHUB_API_URL": root,
+            },
+        )
+        assert completed.returncode == 1
+        assert "is not an hdsh policy config" in completed.stderr
+        assert "unparseable as JSON" in completed.stderr
+        assert completed.output_text == ""

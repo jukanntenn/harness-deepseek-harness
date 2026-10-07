@@ -45,9 +45,11 @@ runs:
       # Organization deployments authenticate REST and GraphQL with one GitHub
       # App token; user deployments cannot grant an App access to user-owned
       # Projects, so REST runs on github-token and GraphQL on the PAT behind
-      # the project-token input. A config absent from the default branch skips
-      # only for the pull request that introduces it (the first-adoption
-      # bootstrap); every other absence fails loud as drift.
+      # the project-token input. A default branch without a usable policy
+      # config — the config absent, unparseable as JSON, or carrying no
+      # valid accountType — skips only for the pull request that introduces
+      # or replaces it (the first-adoption bootstrap); every other
+      # unusable config fails loud as drift.
       id: flavor
       if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
       shell: bash

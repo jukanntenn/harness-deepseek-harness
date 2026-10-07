@@ -5,10 +5,12 @@ already mapped its secrets onto the environment variables below. Composite
 actions cannot read the secrets context, so credentials only ever arrive as
 inputs.
 
-A config absent from the default-branch checkout is the first-adoption
-bootstrap moment: the pull request that introduces the config cannot be
-validated against a policy that does not exist yet, so exactly that pull
-request skips with a notice — every other absence stays a loud failure.
+A default branch without a usable policy config — the config absent,
+unparseable as JSON, or carrying no valid ``accountType`` — is the
+first-adoption bootstrap moment: the pull request that introduces or
+replaces the config cannot be validated against a policy that does not
+exist yet, so exactly that pull request skips with a notice — every other
+unusable config stays a loud failure.
 """
 
 # ruff: noqa: S310 - every URL derives from the scheme-validated API root below
@@ -106,8 +108,23 @@ def _pull_request_introduces(config_path: str) -> bool:
     return config_path in _pull_request_filenames(repository, number, token)
 
 
-def _handle_missing_config(title: str, config_path: str) -> int:
-    """Bootstrap skip or loud drift for a config absent from the checkout."""
+def _bootstrap_or_drift(title: str, config_path: str, *, absent: bool, detail: str = "") -> int:
+    """Bootstrap skip or loud drift for a default branch without a usable config.
+
+    The default branch carries no policy to validate against when its config
+    is absent or not an hdsh policy config; exactly the pull request that
+    adds or modifies the config path bootstraps with a notice, and every
+    other run fails loud naming the unusable state.
+
+    Args:
+        title: The workflow title prefix for annotations.
+        config_path: The checked-out policy config path.
+        absent: Whether the config is missing from the checkout entirely.
+        detail: The foreign-schema reason, for the non-absent states.
+
+    Returns:
+        The process exit code.
+    """
     try:
         introduces = _pull_request_introduces(config_path)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
@@ -118,14 +135,21 @@ def _handle_missing_config(title: str, config_path: str) -> int:
         )
         return 1
     if introduces:
-        print(
-            f"::notice title={title} bootstrap::no policy config on the default "
-            "branch yet; this pull request introduces it, so validation starts "
-            "after merge"
+        state = (
+            "no policy config on the default branch yet; this pull request introduces it"
+            if absent
+            else f"the default-branch config is not an hdsh policy ({detail}); "
+            "this pull request replaces it"
         )
+        print(f"::notice title={title} bootstrap::{state}, so validation starts after merge")
         _write_output("skip", "true")
         return 0
-    fail(title, "config", f"{config_path} is absent from the default branch checkout")
+    message = (
+        f"{config_path} is absent from the default branch checkout"
+        if absent
+        else f"{config_path} on the default branch is not an hdsh policy config ({detail})"
+    )
+    fail(title, "config", message)
     return 1
 
 
@@ -142,8 +166,12 @@ def main() -> int:
     try:
         config = json.loads(Path(config_path).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return _handle_missing_config(title, config_path)
-    except (OSError, ValueError) as error:
+        return _bootstrap_or_drift(title, config_path, absent=True)
+    except ValueError as error:
+        return _bootstrap_or_drift(
+            title, config_path, absent=False, detail=f"unparseable as JSON: {error}"
+        )
+    except OSError as error:
         fail(title, "config", f"cannot read the policy config {config_path}: {error}")
         return 1
     flavor = config.get("accountType") if isinstance(config, dict) else None
@@ -157,8 +185,9 @@ def main() -> int:
                 fail(title, "credentials", _USER_CREDENTIALS_MESSAGE)
                 return 1
         case _:
-            fail(title, "config", f"unknown accountType '{flavor}' in {config_path}")
-            return 1
+            return _bootstrap_or_drift(
+                title, config_path, absent=False, detail=f"unknown accountType '{flavor}'"
+            )
     if not _write_output("account-type", flavor):
         fail(title, "config", "GITHUB_OUTPUT is not set; run inside a workflow step")
         return 1
