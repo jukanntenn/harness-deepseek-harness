@@ -16,7 +16,7 @@ Status: implemented
 - `--account-type` 经 `gh api repos/{owner}/{repository}` 从 origin remote 的 owner 类型推导；非 github.com 的 origin 仍是 blocker。
 - `--lifecycle-actor` 从已认证的 gh 身份推导——将要写 Project 变更的凭据正是生命周期用以比对的身份。
 - `--time-zone` 默认取从 `/etc/localtime` 链接读出的操作者本地系统时区；GitHub 没有可读取的账户时区。
-- 每个推导都在 plan 输出中回显，每个旗标仍是显式覆盖，全旗标运行保持离线——封闭的 e2e 测试套件依赖这一点，且有测试钉住。
+- 每个推导都在 plan 输出中回显，每个旗标仍是显式覆盖，全旗标运行保持离线——封闭的 e2e 测试套件依赖这一点，且有测试钉住。被阻塞项拒绝的运行把阻塞之前收集到的回显置于阻塞诊断之前打印，参数解析从不藏在中止它的拒绝背后。
 - 既有 `config.json` 仍按[配置所有权 RFC](2026-10-01-consumer-configuration-ownership.zh.md) 的定义作为绑定输入；缺省的旗标不再与它冲突——只有显式传入且与文件值矛盾的旗标才是 blocker。
 - `--project-number` 与 `--project-title` 保持手输：看板身份是唯有消费方（或未来的建板步骤）才能陈述的东西。
 

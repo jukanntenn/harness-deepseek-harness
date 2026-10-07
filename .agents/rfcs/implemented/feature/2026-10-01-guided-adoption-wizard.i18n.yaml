@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/feature/2026-10-01-guided-adoption-wizard.md
-2026-10-01-guided-adoption-wizard.md: e72b10091a909a4373805f09362884681f32289a
-2026-10-01-guided-adoption-wizard.zh.md: 95c119af9aca823ed5443d4c9aaa3dac35a61b69
+2026-10-01-guided-adoption-wizard.md: d8d0cc41a13619ec7277dd1573d9f7a1a143395c
+2026-10-01-guided-adoption-wizard.zh.md: abee3cdbf0e3b2527541e66e88ade0a103d84a54

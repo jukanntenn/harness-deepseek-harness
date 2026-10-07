@@ -10,14 +10,14 @@ Status: implemented
 
 ## 决策
 
-- `hdsh adopt checklist` 以可直接复制执行的命令打印 Phase 1 枚举，全部派生自单一来源：policy rules 中的 `LABEL_DESCRIPTIONS`——经测试钉死为恰好的封闭 `kind/*`、`type/*` 与优先级集合——七个标准状态、`Priority` 单选选项、`field-create` 命令。它点名诚实的边界：gh 无法编辑内置 Status 字段的选项，七个状态在看板 UI 里设置；它也点名 `gh auth refresh -s project` 的补救。
+- `hdsh adopt checklist` 以可直接复制执行的命令打印 Phase 1 枚举，全部派生自单一来源：policy rules 中的 `LABEL_DESCRIPTIONS`——经测试钉死为恰好的封闭 `kind/*`、`type/*` 与优先级集合——七个标准状态、`Priority` 单选选项、`field-create` 命令。gh 无法编辑内置 Status 字段的选项，checklist 于是打印一次设好全部七条的两条 GraphQL 命令：字段 id 查询（示例用 `user(login:)`，组织账户点名 `organization(login:)`）与携带标准选项集的 `updateProjectV2Field` mutation，均以 `gh api graphql` 调用、由本就携带 `project` scope 的操作者令牌执行——第五个接入方已在看板 #6 上实证该路线。它也点名 `gh auth refresh -s project` 的补救。
 - preflight 解析成功的 `gh auth status` 所披露的 `Token scopes:` 行，没有任何一行提到 `project` 时发出提示——不是阻塞——未披露 scopes（无法识别的输出格式）保持沉默而不是出错。提示与失败分开，因为组织部署的 workflow 由操作者令牌从不携带的 App 凭据驱动。
 - 翻译规则现在写明该 pattern：两侧标题旁放置相同的 `<a id>`，链接原样指向它——两个门禁本就接受的调和方式，没有任何门禁被削弱。
-- 接入手册把 Phase 1 指向 checklist，写明 scope 补救与 Status-UI 边界，并记录[引导 RFC](../bug-fix/2026-10-05-first-adoption-policy-bootstrap.zh.md) 决定的接入 PR 引导行为。
+- 接入手册把 Phase 1 指向 checklist，写明 scope 补救与 GraphQL 设置 Status 选项的路线，并记录[引导 RFC](../bug-fix/2026-10-05-first-adoption-policy-bootstrap.zh.md) 决定的接入 PR 引导行为。
 
 ## 验证
 
-checklist 输出经测试对常量钉死——每条 label 命令及其描述、全部七个状态、两个 field-create 形态、UI 边界与 scope 补救——分类学测试证明 `LABEL_DESCRIPTIONS` 恰好覆盖封闭标签集合。scope 提示经注入 transport（无 project、有 project、未披露）与解析器直接钉死。翻译规则与接入手册配对在配对门禁下重录绿色，改动语料通过 wrap、links 与 budget 门禁。
+checklist 输出经测试对常量钉死——每条 label 命令及其描述、全部七个状态、两个 field-create 形态、字段 id 查询与 Status 选项 mutation、scope 补救——分类学测试证明 `LABEL_DESCRIPTIONS` 恰好覆盖封闭标签集合。scope 提示经注入 transport（无 project、有 project、未披露）与解析器直接钉死。翻译规则与接入手册配对在配对门禁下重录绿色，改动语料通过 wrap、links 与 budget 门禁。
 
 ## 考虑过的替代方案
 
@@ -27,8 +27,10 @@ checklist 输出经测试对常量钉死——每条 label 命令及其描述、
 
 **放宽配对门禁以接受按 locale 生成 slug 的 fragment。** 否决：结构签名比较全等 fragment，因为分裂的锚点恰是它存在要去抓的分歧；显式锚点在不削弱任何门禁的前提下调和了两者。
 
+**把 Status 选项 mutation 封装为 hdsh 子命令。** 本次否决：接入时刻 hdsh 不持有任何 Project 凭据——操作者的 gh 令牌是唯一在场的凭据，`gh api graphql` 直接复用它而无需新增 hdsh 面；若接入方想要幂等收敛而非一次性打印，一等命令可以后补。
+
 ## 后果
 
 换来的是：Phase 1 的操作者——人或 agent——跑一条命令代替读源码，在建看板步骤之前而不是之上得知 scope 要求，译者拿到了带语料实例背书的正式 fragment pattern。
 
-付出的是：checklist 是又一个需要与常量保持对齐的面（由测试把持），scope 提示在「仅限已披露行」的规则下读取 gh 的输出格式，而 Status 选项仍是命令只能点名、无法代劳的手工 UI 步骤。
+付出的是：checklist 是又一个需要与常量保持对齐的面（由测试把持），scope 提示在「仅限已披露行」的规则下读取 gh 的输出格式，而 Status 选项经由打印的 GraphQL 设置而非一等 hdsh 命令——裸 mutation 整体替换选项集，选项已发散的看板只能靠重跑它收敛。

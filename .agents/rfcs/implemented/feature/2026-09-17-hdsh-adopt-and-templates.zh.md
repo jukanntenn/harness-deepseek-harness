@@ -32,7 +32,7 @@ Status: implemented
 
 ### ADOPT.md：非机械的一半
 
-根目录文档 [ADOPT.md](../../../../ADOPT.zh.md) 是 i18n 契约下的双语配对（bilingual pair），是文档标准里的新 tier：消费方侧操作手册，与 CONTRIBUTING、SECURITY 同为祈使式命名。它是路由器——按序分阶段，每阶段前置条件、动作、verify 命令——并承载无法机械化的部分：git 外状态清单（标签体系、Project board 字段与状态、secrets 与 variables、分支保护），以 `gh` CLI 命令的形式交给消费方 agent 执行、由人确认，外加完成接入所需的 README 配对与占位符补全。根 `ADOPT.md` 与 README、社区文件并列，作为根级配对文档进入配对语料。
+根目录文档 [ADOPT.md](../../../../ADOPT.zh.md) 是 i18n 契约下的双语配对（bilingual pair），是文档标准里的新 tier：消费方侧操作手册，与 CONTRIBUTING、SECURITY 同为祈使式命名。它是路由器——按序分阶段，每阶段前置条件、动作、verify 命令——并承载无法机械化的部分：git 外状态清单（标签体系、Project board 字段与状态、secrets 与 variables、分支保护），以 `gh` CLI 命令的形式交给消费方 agent 执行、由人确认，外加完成接入所需的 README 配对与占位符补全。各阶段还警告消费方本地工具与被安装树的冲突：把缺失镜像侧读作删除的 skills 镜像工具必须先看到整棵已装 `.agents/skills/` 树复制到镜像侧才能运行，共享同一轮 prek 的消费方格式化器必须排除被安装的路径，否则改写的上游所有字节会被门禁在同轮标红。根 `ADOPT.md` 与 README、社区文件并列，作为根级配对文档进入配对语料。
 
 ### 语料需要的引擎支持
 

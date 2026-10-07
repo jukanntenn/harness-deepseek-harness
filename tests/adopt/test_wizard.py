@@ -349,14 +349,18 @@ class TestChecklist:
         assert wizard.checklist_main(parsed) == 0
         output = capsys.readouterr().out
         assert all(status in output for status in STANDARD_STATUSES)
-        assert "gh cannot edit those options; set them in the board UI" in output
+        assert "gh cannot edit those options; the mutation below sets all seven" in output
+        assert 'query{user(login:"<owner>"){projectV2(number:<number>)' in output
+        assert "updateProjectV2Field(input:{projectId:$p,fieldId:$f,singleSelectOptions:[" in output
+        assert '{name:"Inbox"},{name:"Backlog"},{name:"Ready"},{name:"In progress"},' in output
+        assert 'organization(login:"<owner>")' in output
         field_create = (
             '--name Priority --data-type SINGLE_SELECT --single-select-options "p0,p1,p2,p3"'
         )
         assert field_create in output
         assert '--name "Start date" --data-type DATE' in output
         assert "gh project create --title <title> --owner <owner>" in output
-        assert "gh project link <number> --owner <owner> --repository <repository>" in output
+        assert "gh project link <number> --owner <owner> --repo <repository>" in output
         assert "gh auth refresh -s project" in output
 
     def test_the_taxonomy_covers_exactly_the_closed_sets(self) -> None:

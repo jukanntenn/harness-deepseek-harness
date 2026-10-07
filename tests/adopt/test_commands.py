@@ -366,7 +366,7 @@ class TestConsumerConfigOwnership:
     def test_conflicting_flag_against_existing_config_json_blocks(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        target = consumer.root / ".github" / "issue-management" / "config.json"
+        target = consumer.root / ".github/issue-management/config.json"
         target.parent.mkdir(parents=True)
         target.write_text(json.dumps(_consumer_config(), indent=2) + "\n", encoding="utf-8")
         git("add", "-A", cwd=consumer.root)
@@ -375,6 +375,20 @@ class TestConsumerConfigOwnership:
         assert "contradicts the existing config.json projectNumber value '3'" in (
             capsys.readouterr().err
         )
+
+    def test_a_blocker_rejected_plan_still_prints_the_resolved_echoes(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        target = consumer.root / ".github/issue-management/config.json"
+        target.parent.mkdir(parents=True)
+        target.write_text(json.dumps(_consumer_config(), indent=2) + "\n", encoding="utf-8")
+        git("add", "-A", cwd=consumer.root)
+        git("commit", "-qm", "hand-authored config", cwd=consumer.root)
+        assert plan_cli(*adopt_arguments("--project-number", "4")) == 1
+        error = capsys.readouterr().err
+        echo = "parameters resolved from the existing config.json (binding input)"
+        assert echo in error
+        assert error.index(echo) < error.index("blocker(s) prevent adoption")
 
     def test_malformed_existing_config_json_blocks(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]

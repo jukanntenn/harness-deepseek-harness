@@ -349,11 +349,27 @@ def checklist_lines() -> list[str]:
     )
     lines.append("board (its number is --project-number, its title is --project-title):")
     lines.append("  gh project create --title <title> --owner <owner>")
-    lines.append("  gh project link <number> --owner <owner> --repository <repository>")
+    lines.append("  gh project link <number> --owner <owner> --repo <repository>")
     lines.append(
         "  statuses on the built-in Status field: "
         + ", ".join(STANDARD_STATUSES)
-        + " — gh cannot edit those options; set them in the board UI"
+        + " — gh cannot edit those options; the mutation below sets all seven in one"
+        " call (it replaces the whole option set)"
+    )
+    lines.append(
+        "  board and Status-field ids (user entry shown; organization accounts use"
+        ' organization(login:"<owner>")):'
+    )
+    lines.append(
+        '  gh api graphql -f query=\'query{user(login:"<owner>"){projectV2(number:<number>)'
+        '{id field(name:"Status"){... on ProjectV2SingleSelectField{id}}}}}\''
+    )
+    lines.append(
+        "  gh api graphql -f query='mutation($p:ID!,$f:ID!){updateProjectV2Field(input:"
+        "{projectId:$p,fieldId:$f,singleSelectOptions:["
+        + ",".join(f'{{name:"{status}"}}' for status in STANDARD_STATUSES)
+        + "]}){projectV2Field{... on ProjectV2SingleSelectField{options{name}}}}}'"
+        " -f p=<projectId> -f f=<fieldId>"
     )
     lines.append(
         "  gh project field-create <number> --owner <owner> --name Priority "

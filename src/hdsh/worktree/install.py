@@ -62,12 +62,43 @@ _KNOWN_INHERITED_SCOPES = ("system", "global", "local")
 _REPLACEABLE_SCOPES = ("command", "worktree")
 
 
-def _refuse_inherited_hooks_path(entry: dict[str, str]) -> NoReturn:
+def _default_location_hint(root: str, entry: dict[str, str]) -> str:
+    """The behavior-preserving hint for a refused path naming the default location.
+
+    Args:
+        root: Repository root (a linked worktree or the main worktree).
+        entry: The refused inherited ``core.hooksPath`` config entry.
+
+    Returns:
+        A clause appended to the refusal when the value resolves to the
+        default hooks directory — removing such a key changes nothing git
+        observably does — or ``""`` for every genuinely custom path. The
+        default is computed as the per-worktree git dir plus ``hooks``:
+        ``git rev-parse --git-path hooks`` would honor the very
+        ``core.hooksPath`` being refused and echo it back as the default.
+    """
+    git_directory = strip_git_line_terminator(
+        run_git(root, ["rev-parse", "--absolute-git-dir"]).stdout
+    )
+    default_hooks = str(Path(git_directory, "hooks"))
+    value = entry["value"]
+    resolved_value = value if Path(value).is_absolute() else str(Path(root, value))
+    if normalized_path(resolved_value) != normalized_path(default_hooks):
+        return ""
+    return (
+        " — the value names the default hooks location itself, so removing the key"
+        f" with git config --unset core.hooksPath (at {entry['origin']}) preserves"
+        " behavior and unblocks the install"
+    )
+
+
+def _refuse_inherited_hooks_path(entry: dict[str, str], root: str) -> NoReturn:
     """Fail loud on a user-owned inherited ``core.hooksPath``."""
     msg = (
         f"refusing to replace user-owned core.hooksPath ({entry['origin']}: "
-        f"{entry['value']!r}). Chain those hooks through prek.toml, or, if this inherited "
-        f"path may remain active only in other worktrees, rerun with "
+        f"{entry['value']!r}){_default_location_hint(root, entry)}. Chain those hooks "
+        "through prek.toml, or, if this inherited "
+        "path may remain active only in other worktrees, rerun with "
         f"{ALLOW_HOOKS_PATH_OVERRIDE}=1"
     )
     raise WorktreeError(msg)
@@ -231,7 +262,7 @@ def install(root: str) -> str:
                 ):
                     _refuse_scoped_hooks_path(effective)
                 if os.environ.get(ALLOW_HOOKS_PATH_OVERRIDE) != "1":
-                    _refuse_inherited_hooks_path(effective)
+                    _refuse_inherited_hooks_path(effective, root)
         else:
             _refuse_orphaned_plain_hooks(root)
         migration = plan_worktree_config_migration(root, common_config_path)

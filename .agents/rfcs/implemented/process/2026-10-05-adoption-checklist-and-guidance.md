@@ -10,14 +10,14 @@ Three guidance seams the fourth adopter hit on the way in. First, Phase 1's enum
 
 ## Decision
 
-- `hdsh adopt checklist` prints the Phase 1 enumeration as copy-pasteable commands derived from single sources: `LABEL_DESCRIPTIONS` in the policy rules — pinned by test to exactly the closed `kind/*`, `type/*`, and priority sets — the seven standard statuses, the `Priority` single-select options, and the `field-create` commands. It names the honest boundary: gh cannot edit the built-in Status field's options, so the seven statuses are set in the board UI, and it names the `gh auth refresh -s project` remedy.
+- `hdsh adopt checklist` prints the Phase 1 enumeration as copy-pasteable commands derived from single sources: `LABEL_DESCRIPTIONS` in the policy rules — pinned by test to exactly the closed `kind/*`, `type/*`, and priority sets — the seven standard statuses, the `Priority` single-select options, and the `field-create` commands. gh cannot edit the built-in Status field's options, so the checklist prints the two GraphQL commands that set all seven in one call: the field-id query (`user(login:)` shown, `organization(login:)` named for organization accounts) and the `updateProjectV2Field` mutation with the standard option set, both as `gh api graphql` invocations runnable by the operator token that already carries the `project` scope — the fifth adopter proved the route by setting board #6's statuses with it. It also names the `gh auth refresh -s project` remedy.
 - Preflight parses the `Token scopes:` lines a successful `gh auth status` discloses and emits an advisory — not a blocker — when none mentions `project`; undisclosed scopes (an unrecognized output format) stay silent rather than wrong. The advisory is separate from failures because organization deployments drive their workflows with App credentials the operator token never carries.
 - The translation rule now states the pattern: the same `<a id>` on both sides beside the heading, the fragment linked verbatim — the reconciliation the two gates already accept, no gate weakened.
 - The adoption manual points Phase 1 at the checklist, states the scope remedy and the Status-UI boundary, and documents the adoption-pull-request bootstrap behavior decided in [the bootstrap RFC](../bug-fix/2026-10-05-first-adoption-policy-bootstrap.md).
 
 ## Verification
 
-Checklist output is pinned by test against the constants — every label command with its description, all seven statuses, both field-create forms, the UI boundary, and the scope remedy — and the taxonomy test proves `LABEL_DESCRIPTIONS` covers exactly the closed label sets. The scope advisory is pinned through the injected transport (scopeless, project-carrying, undisclosed) and against the parser directly. The translation-rules and adoption-manual pairs re-record green under the pairing gate, and the wrap, links, and budget gates pass over the edited corpus.
+Checklist output is pinned by test against the constants — every label command with its description, all seven statuses, both field-create forms, the field-id query and the Status-options mutation, and the scope remedy — and the taxonomy test proves `LABEL_DESCRIPTIONS` covers exactly the closed label sets. The scope advisory is pinned through the injected transport (scopeless, project-carrying, undisclosed) and against the parser directly. The translation-rules and adoption-manual pairs re-record green under the pairing gate, and the wrap, links, and budget gates pass over the edited corpus.
 
 ## Alternatives considered
 
@@ -27,8 +27,10 @@ Checklist output is pinned by test against the constants — every label command
 
 **Relax the pairing gate to accept locale-sluggable fragments.** Rejected: the structural signature compares exact fragments because a diverged anchor is precisely the divergence it exists to catch; the explicit anchor reconciles both gates without weakening either.
 
+**Wrap the Status-options mutation in an hdsh subcommand.** Rejected for this change: hdsh holds no Project credential at adoption time — the operator's gh token is the only credential in play, and `gh api graphql` rides it without a new hdsh surface; a first-class command can follow if adopters want idempotent convergence rather than a printed one-shot.
+
 ## Consequences
 
 What the change bought: a Phase 1 operator — human or agent — runs one command instead of reading source, learns the scope requirement before the board step rather than at it, and a translator has the sanctioned fragment pattern with the corpus's own pairs as examples.
 
-What it cost: the checklist is one more surface to keep aligned with the constants (held by test), the scope advisory reads gh's output format under a disclosed-only rule, and the Status options remain a manual UI step the command can only name, not perform.
+What it cost: the checklist is one more surface to keep aligned with the constants (held by test), the scope advisory reads gh's output format under a disclosed-only rule, and the Status options are set through printed GraphQL rather than a first-class hdsh command — the raw mutation replaces the option set wholesale, so a board whose options diverge converges only by rerunning it.
