@@ -7,6 +7,7 @@ import datetime
 import json
 import re
 from pathlib import Path
+from typing import override
 
 import pytest
 
@@ -238,6 +239,57 @@ class TestApplyRoundTrip:
         assert "the .gitattributes pairing driver line is already present" in (
             capsys.readouterr().out
         )
+
+    def test_reapplication_reuses_the_recorded_adoption_date(
+        self,
+        consumer: Repo,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        manifest_path = consumer.root / ".hdsh" / "adopt.manifest.json"
+        recorded = json.loads(manifest_path.read_text(encoding="utf-8"))["adoptDate"]
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", recorded)
+        anchors = consumer.root / ".agents" / "rfcs" / "implemented" / "process"
+        assert (anchors / f"{recorded}-adopting-the-hdsh-harness.md").is_file()
+        commit_all(consumer, "adopt hdsh")
+
+        class _NextDayDatetime(datetime.datetime):
+            @override
+            @classmethod
+            def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+                zone = tz if tz is not None else datetime.UTC
+                return datetime.datetime(2031, 1, 1, tzinfo=zone)
+
+        class _NextDayModule:
+            datetime: type[datetime.datetime] = _NextDayDatetime
+
+        monkeypatch.setattr(adopt_module, "datetime", _NextDayModule)
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert f"adoption date {recorded} reused from the adopt manifest" in output
+        assert json.loads(manifest_path.read_text(encoding="utf-8"))["adoptDate"] == recorded
+        assert (anchors / f"{recorded}-adopting-the-hdsh-harness.md").is_file()
+        assert not (anchors / "2031-01-01-adopting-the-hdsh-harness.md").exists()
+
+    def test_a_fieldless_manifest_records_the_derived_date(self, consumer: Repo) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        manifest_path = consumer.root / ".hdsh" / "adopt.manifest.json"
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        del payload["adoptDate"]
+        manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        commit_all(consumer, "adopt hdsh")
+        assert apply_cli(*adopt_arguments()) == 0
+        recorded = json.loads(manifest_path.read_text(encoding="utf-8"))["adoptDate"]
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", recorded)
+        assert (
+            consumer.root
+            / ".agents"
+            / "rfcs"
+            / "implemented"
+            / "process"
+            / f"{recorded}-adopting-the-hdsh-harness.md"
+        ).is_file()
 
     def test_a_malformed_consumer_pairing_manifest_skips_the_sizing_note(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]

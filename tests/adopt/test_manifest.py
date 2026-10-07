@@ -129,6 +129,25 @@ class TestLoadManifest:
         with pytest.raises(ManifestError, match="projectAnchor"):
             load_manifest(str(tmp_path))
 
+    def test_malformed_adopt_date_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / ".hdsh" / "adopt.manifest.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps({"hdshVersion": "0.1.0", "hdshRef": "v0.1.0", "files": {}, "adoptDate": 5}),
+            encoding="utf-8",
+        )
+        with pytest.raises(ManifestError, match="adoptDate"):
+            load_manifest(str(tmp_path))
+
+    def test_absent_adopt_date_defaults_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / ".hdsh" / "adopt.manifest.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps({"hdshVersion": "0.1.0", "hdshRef": "v0.1.0", "files": {}}),
+            encoding="utf-8",
+        )
+        assert load_manifest(str(tmp_path)).adopt_date == ""
+
     def test_round_trip_preserves_state(self, tmp_path: Path) -> None:
         save_manifest(
             str(tmp_path),
@@ -140,6 +159,7 @@ class TestLoadManifest:
                 pending_merges=("AGENTS.md",),
                 consumer_config=(".hdsh/pairing.manifest.json",),
                 project_anchor=3,
+                adopt_date="2026-10-05",
             ),
         )
         loaded = load_manifest(str(tmp_path))
@@ -150,3 +170,4 @@ class TestLoadManifest:
         assert loaded.pending_merges == ("AGENTS.md",)
         assert loaded.consumer_config == (".hdsh/pairing.manifest.json",)
         assert loaded.project_anchor == 3
+        assert loaded.adopt_date == "2026-10-05"
