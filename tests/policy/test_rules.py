@@ -12,6 +12,7 @@ from hdsh.policy.rules import (
     next_resolving_issue_status,
     parse_references,
     project_date,
+    pull_request_head_exempt,
     requires_pull_request_policy,
     resolving_issue_status_command,
     retain_issue_references,
@@ -251,6 +252,15 @@ class TestLifecycle:
         assert not requires_pull_request_policy(True, "User", 1, 0)
         assert not requires_pull_request_policy(False, "Bot", 1, 0)
         assert requires_pull_request_policy(False, "User", 0, 1)
+
+    def test_head_ref_exemption_glob_semantics(self) -> None:
+        assert pull_request_head_exempt("release/2.0.0", ("release/*",))
+        assert pull_request_head_exempt("release/2.0.0/hotfix", ("release/*",))
+        assert pull_request_head_exempt("exact-ref", ("exact-ref",))
+        assert not pull_request_head_exempt("feature/work", ("release/*",))
+        assert not pull_request_head_exempt("Release/2.0.0", ("release/*",))
+        assert not pull_request_head_exempt("release/2.0.0", ())
+        assert pull_request_head_exempt("release/2.0.0", ("other/*", "release/*"))
 
     def test_explicit_review_handoffs_map_to_commands(self) -> None:
         assert (

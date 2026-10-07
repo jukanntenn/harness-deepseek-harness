@@ -7,6 +7,7 @@ event-directed status-transition planner.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import unicodedata
 import zoneinfo
@@ -326,6 +327,21 @@ def requires_pull_request_policy(
     """
     automated = author_type in ("Bot", "App")
     return not is_draft and not automated and (review_request_count > 0 or review_count > 0)
+
+
+def pull_request_head_exempt(head_ref: str, patterns: tuple[str, ...]) -> bool:
+    """Decide whether a pull-request head ref is configured out of the policy.
+
+    Args:
+        head_ref: The pull request's head reference name.
+        patterns: The config's exemption globs, ``fnmatch`` semantics —
+            ``*`` crosses ``/``, so one ``release/*`` pattern covers nested
+            release refs — compared case-sensitively like ref names.
+
+    Returns:
+        Whether any configured pattern matches the head ref.
+    """
+    return any(fnmatch.fnmatchcase(head_ref, pattern) for pattern in patterns)
 
 
 def resolving_issue_status_command(event_name: str, event: dict[str, Any]) -> str | None:

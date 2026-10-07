@@ -420,6 +420,7 @@ class TestClient:
                 return 200, json.dumps(
                     {
                         "draft": False,
+                        "head": {"ref": "feature/work"},
                         "user": {"type": "User"},
                         "labels": [],
                         "body": "",
@@ -669,6 +670,7 @@ class TestPullRequestFlows:
                 return 200, json.dumps(
                     {
                         "draft": False,
+                        "head": {"ref": "feature/work"},
                         "user": {"type": "User"},
                         "labels": [{"name": "kind/feature"}],
                         "body": "Fixes #2",
@@ -1016,6 +1018,7 @@ class TestClientBranches:
                 return 200, json.dumps(
                     {
                         "draft": False,
+                        "head": {"ref": "feature/work"},
                         "user": {"type": "User"},
                         "labels": [{"name": "kind/feature"}, {"name": "area/infra"}],
                         "body": "Fixes #2",
@@ -1060,6 +1063,7 @@ class TestClientBranches:
                 return 200, json.dumps(
                     {
                         "draft": False,
+                        "head": {"ref": "feature/work"},
                         "user": {"type": "User"},
                         "labels": [{"name": "kind/feature"}, {"name": "area/infra"}],
                         "body": "Fixes #2",
@@ -1090,6 +1094,43 @@ class TestClientBranches:
         client = _client(transport)
         client.run_pull_request_check({"pull_request": {"number": 9}})
         assert "not yet in the Issue policy enforcement scope." in capsys.readouterr().out
+
+    def test_run_pull_request_check_skips_an_exempt_head_ref(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def transport(
+            url: str,
+            method: str = "GET",
+            body: str | None = None,
+            headers: dict[str, str] | None = None,
+        ) -> tuple[int, str]:
+            if url.endswith("/pulls/9"):
+                return 200, json.dumps(
+                    {
+                        "draft": False,
+                        "head": {"ref": "release/2.0.0"},
+                        "user": {"type": "User"},
+                        "labels": [],
+                        "body": "",
+                        "created_at": "2026-01-01T00:00:00Z",
+                    }
+                )
+            if url.endswith("/requested_reviewers"):
+                return 200, json.dumps({"users": [{"login": "r"}], "teams": []})
+            if "/reviews" in url:
+                return 200, "[]"
+            raise AssertionError(url)
+
+        client = GitHubPolicyClient(
+            PolicyConfig.from_json(config_with(pullRequestExemptHeadRefs=["release/*"])),
+            repository_token="r-token",
+            project_token="p-token",
+            transport=transport,
+        )
+        client.run_pull_request_check({"pull_request": {"number": 9}})
+        output = capsys.readouterr().out
+        assert "'release/2.0.0' is exempt from the Issue policy by configuration." in output
+        assert "::error::" not in output
 
     def test_audit_valid_issue_without_existing_comment(self) -> None:
         def transport(
@@ -1130,6 +1171,7 @@ class TestClientBranches:
                 return 200, json.dumps(
                     {
                         "draft": False,
+                        "head": {"ref": "feature/work"},
                         "user": {"type": "User"},
                         "labels": [],
                         "body": "Fixes #2",
