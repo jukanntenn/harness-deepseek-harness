@@ -1337,6 +1337,47 @@ def _workflow_group_drift(root: str) -> list[str]:
     return drift
 
 
+def _skills_mirror_hint(root: str, manifest: AdoptManifest) -> str | None:
+    """The advisory for a skills-mirror layout missing installed skills.
+
+    hdsh owns only ``.agents/skills/``; a consumer tool that mirrors skills
+    into another agent's directory direction-agnostically reads the absent
+    far side as a deletion, so an unmirrored install is one mirror run away
+    from losing every skill. The hint is advisory — the mirror tree is
+    consumer-owned, and a missing counterpart is not drift in hdsh's files.
+
+    Args:
+        root: Consumer repository root.
+        manifest: The adopt manifest naming the installed skill paths.
+
+    Returns:
+        The advisory naming the unmirrored skills and the remedy, or
+        ``None`` when no mirror directory exists or every installed skill
+        has its mirror counterpart.
+    """
+    if not Path(root, ".claude", "skills").is_dir():
+        return None
+    installed = sorted(
+        path
+        for path in (*manifest.files, *manifest.editable, *manifest.slot_templates)
+        if path.startswith(".agents/skills/")
+    )
+    missing = [
+        path
+        for path in installed
+        if not Path(root, ".claude", path.removeprefix(".agents/")).exists()
+    ]
+    if not missing:
+        return None
+    return (
+        f"a skills mirror exists at .claude/skills/ but {len(missing)} of "
+        f"{len(installed)} installed skill file(s) have no counterpart there "
+        f"(for example {missing[0]}); a mirror tool that reads the absent far "
+        "side as deletion removes them — copy .agents/skills/ to the mirror "
+        "side before running it"
+    )
+
+
 def _ci_gate_drift(root: str) -> list[str]:
     """Flag CI workflows that never run an hdsh gate.
 
@@ -1416,6 +1457,9 @@ def verify_main(args: argparse.Namespace) -> int:
     drift.extend(_ci_gate_drift(root))
     if not _workflow_files(root):
         print(f"{TOOL}: no CI workflows found; the gates run only locally until CI wires them")
+    mirror_hint = _skills_mirror_hint(root, manifest)
+    if mirror_hint is not None:
+        print(f"{TOOL}: {mirror_hint}")
     placeholders: list[str] = []
     pending: list[str] = []
     sources = tuple(

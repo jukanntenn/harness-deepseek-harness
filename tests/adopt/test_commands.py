@@ -6,6 +6,7 @@ import argparse
 import datetime
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import override
 
@@ -735,6 +736,52 @@ class TestVerify:
         capsys.readouterr()
         assert verify_cli() == 0
         assert "placeholder(s) remain" not in capsys.readouterr().out
+
+    def test_warns_of_installed_skills_missing_from_a_skills_mirror(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        wire_ci_gates(consumer)
+        for path in consumer.root.rglob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            if "TODO(adopt):" in text:
+                path.write_text(text.replace("TODO(adopt): ", ""), encoding="utf-8")
+        (consumer.root / ".claude" / "skills").mkdir(parents=True)
+        capsys.readouterr()
+        assert verify_cli() == 0
+        output = capsys.readouterr().out
+        assert "a skills mirror exists at .claude/skills/" in output
+        assert "copy .agents/skills/ to the mirror side" in output
+
+    def test_a_fully_mirrored_skills_tree_prints_no_hint(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        wire_ci_gates(consumer)
+        for path in consumer.root.rglob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            if "TODO(adopt):" in text:
+                path.write_text(text.replace("TODO(adopt): ", ""), encoding="utf-8")
+        shutil.copytree(consumer.root / ".agents" / "skills", consumer.root / ".claude" / "skills")
+        capsys.readouterr()
+        assert verify_cli() == 0
+        assert "skills mirror" not in capsys.readouterr().out
+
+    def test_no_mirror_directory_prints_no_hint(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        wire_ci_gates(consumer)
+        for path in consumer.root.rglob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            if "TODO(adopt):" in text:
+                path.write_text(text.replace("TODO(adopt): ", ""), encoding="utf-8")
+        capsys.readouterr()
+        assert verify_cli() == 0
+        assert "skills mirror" not in capsys.readouterr().out
 
     def test_reports_drift_on_modified_and_missing_files(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
