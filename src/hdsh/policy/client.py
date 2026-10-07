@@ -20,6 +20,7 @@ from hdsh.policy.rules import (
     next_resolving_issue_status,
     parse_references,
     project_date,
+    pull_request_head_exempt,
     requires_pull_request_policy,
     resolving_issue_status_command,
     retain_issue_references,
@@ -536,6 +537,7 @@ class GitHubPolicyClient:
         return {
             **resolving,
             "isDraft": pull["draft"],
+            "headRef": pull["head"]["ref"],
             "authorType": (pull.get("user") or {}).get("type", "User"),
             "reviewRequestCount": len(review_requests["users"]) + len(review_requests["teams"]),
             "reviewCount": len(reviews),
@@ -588,6 +590,12 @@ class GitHubPolicyClient:
             event: Pull-request event payload.
         """
         pull = self.pull_request_snapshot(event["pull_request"]["number"])
+        if pull_request_head_exempt(pull["headRef"], self.config.pull_request_exempt_head_refs):
+            print(
+                f"Pull request head ref {pull['headRef']!r} is exempt from the "
+                "Issue policy by configuration."
+            )
+            return
         errors = validate_pull_request(pull)
         if errors:
             for error in errors:

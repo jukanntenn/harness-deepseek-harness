@@ -27,6 +27,10 @@ class PolicyConfig:
     project_time_zone: str
     statuses: tuple[str, ...]
     allow_unassigned_owner: bool = False
+    #: ``fnmatch`` globs over pull-request head ref names; a matching pull
+    #: request skips the pull-request policy entirely. Absent means no
+    #: exemption — the closed-set behavior every repository starts from.
+    pull_request_exempt_head_refs: tuple[str, ...] = ()
 
     @classmethod
     def from_json(cls, content: str) -> PolicyConfig:
@@ -75,6 +79,12 @@ class PolicyConfig:
         if not isinstance(allow_unassigned_owner, bool):
             msg = "config.allowUnassignedOwner must be a boolean"
             raise ValueError(msg)  # noqa: TRY004
+        exempt_head_refs = value.get("pullRequestExemptHeadRefs", [])
+        if not isinstance(exempt_head_refs, list) or not all(
+            isinstance(pattern, str) and pattern for pattern in exempt_head_refs
+        ):
+            msg = "config.pullRequestExemptHeadRefs must be a list of non-empty glob strings"
+            raise ValueError(msg)
         config = cls(
             owner=value["owner"],
             account_type=value["accountType"],
@@ -87,6 +97,7 @@ class PolicyConfig:
             project_time_zone=value["projectTimeZone"],
             statuses=tuple(statuses),
             allow_unassigned_owner=allow_unassigned_owner,
+            pull_request_exempt_head_refs=tuple(exempt_head_refs),
         )
         for status in ("In progress", "In review"):
             if status not in config.active_statuses:

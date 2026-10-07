@@ -45,6 +45,27 @@ class TestPolicyConfigValidation:
         with pytest.raises(ValueError, match="config.accountType must be a string"):
             PolicyConfig.from_json(json.dumps(payload))
 
+    def test_exempt_head_refs_default_to_empty(self) -> None:
+        assert PolicyConfig.from_json(config_with()).pull_request_exempt_head_refs == ()
+
+    def test_accepts_exempt_head_ref_globs(self) -> None:
+        config = PolicyConfig.from_json(
+            config_with(pullRequestExemptHeadRefs=["release/*", "hotfix/*"])
+        )
+        assert config.pull_request_exempt_head_refs == ("release/*", "hotfix/*")
+
+    def test_rejects_non_list_exempt_head_refs(self) -> None:
+        with pytest.raises(ValueError, match="pullRequestExemptHeadRefs must be a list"):
+            PolicyConfig.from_json(config_with(pullRequestExemptHeadRefs="release/*"))
+
+    def test_rejects_empty_exempt_head_ref_entries(self) -> None:
+        with pytest.raises(ValueError, match="non-empty glob strings"):
+            PolicyConfig.from_json(config_with(pullRequestExemptHeadRefs=["release/*", ""]))
+
+    def test_rejects_non_string_exempt_head_ref_entries(self) -> None:
+        with pytest.raises(ValueError, match="non-empty glob strings"):
+            PolicyConfig.from_json(config_with(pullRequestExemptHeadRefs=[7]))
+
     def test_config_requires_active_statuses(self) -> None:
         content = json.dumps(
             {

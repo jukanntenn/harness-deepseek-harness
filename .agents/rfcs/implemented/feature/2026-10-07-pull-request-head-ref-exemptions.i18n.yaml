@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/feature/2026-10-07-pull-request-head-ref-exemptions.md
+2026-10-07-pull-request-head-ref-exemptions.md: 3f2c75a29d427b3de9acb2e0e786bbbdfb29e0a1
+2026-10-07-pull-request-head-ref-exemptions.zh.md: 76f529b116b165a703215e54fce44ccdabf79313
