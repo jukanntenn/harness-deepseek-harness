@@ -3,5 +3,5 @@
 # languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   hdsh pairing record .agents/rfcs/implemented/bug-fix/2026-10-05-first-adoption-policy-bootstrap.md
-2026-10-05-first-adoption-policy-bootstrap.md: 43e2fb05c882411d6c0b837411cc28441ad282e4
-2026-10-05-first-adoption-policy-bootstrap.zh.md: 31bd2420ebda2c952405f0d446ac3bdabf3f98d1
+2026-10-05-first-adoption-policy-bootstrap.md: 50b1621db7d21635ed0afa3095f03950ec750fd6
+2026-10-05-first-adoption-policy-bootstrap.zh.md: ff25f181b28bf2191ae61e2ba26a11f95a53e866

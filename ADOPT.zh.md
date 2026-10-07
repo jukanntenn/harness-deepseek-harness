@@ -17,7 +17,7 @@
 
 先主机安装 hdsh（PyPI 发布前用 `uv tool install "harness-deepseek-harness @ git+<url>@<ref>"`），用 `hdsh adopt preflight` 确认工具链（git、已认证的 gh、裸 `hdsh --version`、以及 `rg --version`——各 skill 以 ripgrep 为前提），带上阶段 1 的编号审阅 `hdsh adopt plan` 后再 `hdsh adopt apply`。两者都显性失败——每个阻塞一条诊断：
 
-只有 Project 编号与标题需要手输；其余缺省时自动推导（ref 取上游最新 tag、账户类型取 remote、actor 取 gh 身份、时区取系统——时区同时决定接入 RFC 的日期），每个推导回显、每个旗标可覆盖、全旗标运行离线。apply 写入 prek 门禁条目与 `.gitattributes` 驱动行、两个薄策略 workflow、策略 `config.json`、issue 与 pull-request 模板、RFC 机制、全部九个 skill（五个镜像、四个槽位引导）、文档标准与 i18n 契约、actionlint 桥接文件、模板化的 `architecture.md` 与 `development.md` 配对，并在没有根 `AGENTS.md` 时写入模板化的常令文件。它记录自己安装的每一对双语配对——既存的 `architecture.md` 或 `development.md` 连同对侧模板与记录一并免写——打印发现的配对语料规模与存量语料的 wrap 重排成本，并写下 `.hdsh/adopt.manifest.json`。接入 PR 是 workflow 认得的引导时刻：合并前两个 workflow 只对它跳过并注记，其余缺失 config 的运行显性失败——无需带红合并。
+只有 Project 编号与标题需要手输；其余缺省时自动推导（ref 取上游最新 tag、账户类型取 remote、actor 取 gh 身份、时区取系统——时区同时决定接入 RFC 的日期），每个推导回显、每个旗标可覆盖、全旗标运行离线。apply 写入 prek 门禁条目与 `.gitattributes` 驱动行、两个薄策略 workflow、策略 `config.json`、issue 与 pull-request 模板、RFC 机制、全部九个 skill（五个镜像、四个槽位引导）、文档标准与 i18n 契约、actionlint 桥接文件、模板化的 `architecture.md` 与 `development.md` 配对，并在没有根 `AGENTS.md` 时写入模板化的常令文件。它记录自己安装的每一对双语配对——既存的 `architecture.md` 或 `development.md` 连同对侧模板与记录一并免写——打印发现的配对语料规模与存量语料的 wrap 重排成本，并写下 `.hdsh/adopt.manifest.json`。接入 PR 是 workflow 认得的引导时刻：合并前两个 workflow 只对它跳过并注记，其余没有可用策略 config 的运行显性失败——无论接入是引入 config 还是替换旧有配置，都无需带红合并。
 
 ## 阶段 3 —— 补全判断的一半
 

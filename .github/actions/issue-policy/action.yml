@@ -39,10 +39,12 @@ runs:
     - name: Resolve deployment flavor and credentials
       # The checked-out config decides which credential flavor must exist;
       # the later `||` selections are proven by this step, not silent defaults.
-      # A config absent from the default branch skips only for the pull
-      # request that introduces it (the first-adoption bootstrap): there is
-      # no policy to validate against until that pull request merges, and
-      # every other absence fails loud as drift.
+      # A default branch without a usable policy config — the config absent,
+      # unparseable as JSON, or carrying no valid accountType — skips only
+      # for the pull request that introduces or replaces it (the
+      # first-adoption bootstrap): there is no policy to validate against
+      # until that pull request merges, and every other unusable config
+      # fails loud as drift.
       id: flavor
       if: ${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}
       shell: bash

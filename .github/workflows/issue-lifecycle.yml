@@ -60,9 +60,11 @@ jobs:
         # GraphQL with one GitHub App token; user deployments cannot grant an
         # App access to user-owned Projects, so REST runs on github.token and
         # GraphQL on a classic PAT (project scope) from HDSH_PROJECT_PAT. A
-        # config absent from the default branch skips only for the pull
-        # request that introduces it (the first-adoption bootstrap); every
-        # other absence fails loud as drift.
+        # default branch without a usable policy config — the config absent,
+        # unparseable as JSON, or carrying no valid accountType — skips only
+        # for the pull request that introduces or replaces it (the
+        # first-adoption bootstrap); every other unusable config fails loud
+        # as drift.
         id: flavor
         if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
         env:
@@ -73,16 +75,32 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
         run: |
           set -eu
-          if [ ! -f .github/issue-management/config.json ]; then
-            if [ -n "$PR_NUMBER" ] && gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' | grep -Fxq '.github/issue-management/config.json'; then
-              echo "::notice title=Issue lifecycle bootstrap::no policy config on the default branch yet; this pull request introduces it, so lifecycle transitions start after merge"
+          config=.github/issue-management/config.json
+          state=""
+          flavor=""
+          if [ ! -f "$config" ]; then
+            state="absent"
+          elif flavor=$(jq -re '.accountType | select(. == "organization" or . == "user")' "$config" 2>/dev/null); then
+            :
+          else
+            state="foreign"
+          fi
+          if [ -n "$state" ]; then
+            if [ "$state" = "absent" ]; then
+              notice="no policy config on the default branch yet; this pull request introduces it, so lifecycle transitions start after merge"
+              drift="$config is absent from the default branch checkout"
+            else
+              notice="the default-branch config is not an hdsh policy, so there is no policy to apply; this pull request replaces it, so lifecycle transitions start after merge"
+              drift="$config on the default branch is not an hdsh policy config"
+            fi
+            if [ -n "$PR_NUMBER" ] && gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' | grep -Fxq "$config"; then
+              echo "::notice title=Issue lifecycle bootstrap::$notice"
               echo "skip=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "::error title=Issue lifecycle config::.github/issue-management/config.json is absent from the default branch checkout" >&2
+            echo "::error title=Issue lifecycle config::$drift" >&2
             exit 1
           fi
-          flavor=$(jq -r .accountType .github/issue-management/config.json)
           case "$flavor" in
             organization)
               if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
@@ -95,10 +113,6 @@ jobs:
                 echo "::error title=Issue lifecycle credentials::user flavor requires secrets.HDSH_PROJECT_PAT (classic PAT, project scope)"
                 exit 1
               fi
-              ;;
-            *)
-              echo "::error title=Issue lifecycle config::unknown accountType '$flavor' in .github/issue-management/config.json"
-              exit 1
               ;;
           esac
           echo "account-type=$flavor" >> "$GITHUB_OUTPUT"
