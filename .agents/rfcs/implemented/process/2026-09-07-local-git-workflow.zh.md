@@ -24,7 +24,7 @@ Status: implemented
 
 - hooks 目录是 `<worktree-git-dir>/hdsh-hooks`，由记录版本、所有者和绝对路径的所有权标记（`.hdsh-hooks-owned`）守护。安装器拒绝创建、使用或覆盖任何不是它自己拥有的常规目录的 hooks 目录，并拒绝目录内多重链接或非常规的条目。
 - 按 worktree 配置要求 `extensions.worktreeConfig` 加仓库格式 1。安装器先校验公共配置——拒绝休眠的扩展、`core.worktree` 和 `core.bare=true`——然后再迁移。
-- `core.hooksPath` 和 `merge.hdsh-pairing` 合并驱动配置只写为 worktree 作用域配置。安装器拒绝遮蔽继承值或替换 worktree 作用域的自定义值；`HDSH_PREK_ALLOW_HOOKS_PATH_OVERRIDE=1` 是针对用户自有继承路径的显式例外。命令作用域的配置永不被替换。
+- `core.hooksPath` 和 `merge.hdsh-pairing` 合并驱动配置只写为 worktree 作用域配置。安装器拒绝遮蔽继承值或替换 worktree 作用域的自定义值；`HDSH_PREK_ALLOW_HOOKS_PATH_OVERRIDE=1` 是针对用户自有继承路径的显式例外。被拒绝的继承值若指向默认钩子位置，则附带「unset 即无操作」提示：移除该键保持行为不变并解锁安装。命令作用域的配置永不被替换。
 - 安装由公共 git 目录中的 `hdsh-hooks-install.lock` 串行化，带基于 PID 的过期锁检测和大声失败的手动恢复错误。后续步骤失败时，所有自有配置写入都会回滚；`prek install --overwrite` 在环境中清除命令作用域 `GIT_CONFIG_*` 后运行。安装还显式携带配置声明的 hook type、证明每个声明 stub 落盘、并拒绝遗弃默认钩子目录中的活跃原生钩子——这些守卫由[接管校验 RFC](../bug-fix/2026-10-05-worktree-hook-takeover-validation.zh.md) 加入。
 - prek 原生支持仓库本地和 worktree 本地的 `core.hooksPath`，其 shim 无需额外胶水即可落到 worktree 本地目录。
 

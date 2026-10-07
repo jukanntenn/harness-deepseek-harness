@@ -127,6 +127,29 @@ class TestRefusals:
         assert (
             git("config", "extensions.worktreeConfig", cwd=repo.root, check=False).returncode == 1
         )
+
+    def test_a_refused_default_location_hooks_path_names_the_no_op_unset(
+        self, repo: Repo, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("HDSH_PREK_ALLOW_HOOKS_PATH_OVERRIDE", raising=False)
+        git("config", "core.hooksPath", ".git/hooks", cwd=repo.root)
+        with pytest.raises(
+            WorktreeError,
+            match=r"the value names the default hooks location itself.*preserves behavior",
+        ):
+            install(str(repo.root))
+        assert (
+            git("config", "extensions.worktreeConfig", cwd=repo.root, check=False).returncode == 1
+        )
+
+    def test_a_refused_custom_hooks_path_carries_no_unset_hint(
+        self, repo: Repo, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("HDSH_PREK_ALLOW_HOOKS_PATH_OVERRIDE", raising=False)
+        git("config", "core.hooksPath", "/user/owned/hooks", cwd=repo.root)
+        with pytest.raises(WorktreeError, match="user-owned") as caught:
+            install(str(repo.root))
+        assert "default hooks location" not in str(caught.value)
         assert git("config", "core.hooksPath", cwd=repo.root).stdout.strip() == "/user/owned/hooks"
 
     def test_override_env_permits_replacement(

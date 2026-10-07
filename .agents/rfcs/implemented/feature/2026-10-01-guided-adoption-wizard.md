@@ -16,7 +16,7 @@ English | [中文](2026-10-01-guided-adoption-wizard.zh.md)
 - `--account-type` derives from the origin remote's owner type through `gh api repos/{owner}/{repository}`; a non-github.com origin remains a blocker.
 - `--lifecycle-actor` derives from the authenticated gh identity — the credential that will write Project mutations is the identity the lifecycle compares against.
 - `--time-zone` defaults to the operator's local system zone read from the `/etc/localtime` link; GitHub exposes no account time zone to read.
-- Every derivation is echoed in the plan output, every flag remains an explicit override, and a fully explicit run stays offline — the hermetic e2e suite depends on that, and it is pinned by test.
+- Every derivation is echoed in the plan output, every flag remains an explicit override, and a fully explicit run stays offline — the hermetic e2e suite depends on that, and it is pinned by test. A blocker-rejected run prints the echoes collected before the blockers ahead of the blocker diagnostics, so parameter resolution never hides behind the refusal that aborted it.
 - An existing `config.json` remains the binding input it became under the [configuration-ownership RFC](2026-10-01-consumer-configuration-ownership.md); absent flags no longer conflict with it — only a passed flag that contradicts a file value is a blocker.
 - `--project-number` and `--project-title` stay hand-typed: the board identity is the one thing only the consumer (or a future board-creation step) can state.
 

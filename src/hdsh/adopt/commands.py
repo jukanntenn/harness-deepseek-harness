@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tomllib
 import zoneinfo
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -119,12 +119,23 @@ class AdoptionPlan:
     notes: tuple[str, ...]
 
 
-def _blockers_error(blockers: list[Blocker]) -> AdoptError:
-    """Render every blocker into one loud, per-file diagnostic."""
+def _blockers_error(blockers: list[Blocker], notes: Iterable[str] = ()) -> AdoptError:
+    """Render every blocker into one loud, per-blocker diagnostic.
+
+    Args:
+        blockers: The collected blockers.
+        notes: The lines already resolved when the blockers struck — parameter
+            echoes above all — carried ahead of the diagnostics so a
+            blocker-rejected run still shows what the parameters resolved to.
+
+    Returns:
+        The error whose message opens with the notes, then the diagnostics.
+    """
     details = "\n".join(
         f"- {blocker.subject}: {blocker.reason} {blocker.suggestion}" for blocker in blockers
     )
-    return AdoptError(f"{len(blockers)} blocker(s) prevent adoption:\n{details}")
+    prefix = "".join(f"{line}\n" for line in notes)
+    return AdoptError(f"{prefix}{len(blockers)} blocker(s) prevent adoption:\n{details}")
 
 
 def _run_git(root: str, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -594,7 +605,7 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
         root, writes, skipped, blockers, pending_merges
     )
     if blockers:
-        raise _blockers_error(blockers)
+        raise _blockers_error(blockers, notes)
     sizing = _pairing_sizing_note(root, writes, records)
     if sizing is not None:
         notes.append(sizing)
