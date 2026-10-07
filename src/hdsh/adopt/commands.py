@@ -101,7 +101,8 @@ class AdoptionPlan:
 
     #: Resolved parameters every rendered asset derived from.
     parameters: AdoptParameters
-    #: Adoption date in ``yyyy-mm-dd`` form, derived from the Project time zone.
+    #: Adoption date in ``yyyy-mm-dd`` form: derived from the Project time
+    #: zone at first apply, reused from the adopt manifest afterwards.
     date: str
     #: Every file write, in installation order.
     writes: tuple[PlannedWrite, ...]
@@ -469,11 +470,11 @@ def _pair_writes(anchor: str, installed: frozenset[str], hdsh_ref: str) -> list[
 def _adoption_date(time_zone: str, *, now: Callable[[datetime.tzinfo], datetime.datetime]) -> str:
     """The adoption date in the Project's time zone, ``yyyy-mm-dd`` form.
 
-    Dated records (the adopt-decision RFC anchor) follow the operator's
-    calendar, so the date derives from the same zone the Project uses —
-    never from UTC alone, which can sit a day behind the operator. The
-    clock is injected so the hermetic suite can sit one instant on two
-    calendars.
+    The first apply derives the date once from the same zone the Project
+    uses — never from UTC alone, which can sit a day behind the operator —
+    and apply records it in the adopt manifest; re-application reuses the
+    recorded date instead of calling here. The clock is injected so the
+    hermetic suite can sit one instant on two calendars.
 
     Args:
         time_zone: The resolved Project time zone.
@@ -508,8 +509,16 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
     """
     blockers: list[Blocker] = []
     notes: list[str] = []
+    previous = _load_previous_manifest(root, blockers)
     parameters = _resolve_parameters(root, arguments, blockers, notes)
-    today = _adoption_date(parameters.time_zone, now=datetime.datetime.now)
+    if previous is not None and previous.adopt_date:
+        today = previous.adopt_date
+        notes.append(
+            f"adoption date {today} reused from the adopt manifest — the RFC anchor "
+            "stays stable across re-application"
+        )
+    else:
+        today = _adoption_date(parameters.time_zone, now=datetime.datetime.now)
     installed = corpus.installed_destinations(today)
     writes: list[PlannedWrite] = []
     records: list[str] = []
@@ -544,7 +553,6 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
         writes.extend(_pair_writes(anchor, installed, parameters.hdsh_ref))
         records.append(anchor)
 
-    previous = _load_previous_manifest(root, blockers)
     consumer_owned: set[str] = set()
     for anchor in corpus.TEMPLATE_PAIRS:
         sides = (anchor, f"{anchor[: -len('.md')]}.zh.md")
@@ -1178,6 +1186,7 @@ def apply_main(args: argparse.Namespace) -> int:
             slot_templates=tuple(sorted(corpus.SLOT_TEMPLATE_DESTINATIONS)),
             slot_guidance=plan.slot_guidance,
             project_anchor=plan.parameters.project_number,
+            adopt_date=plan.date,
         ),
     )
     for line in (*plan.skipped, *plan.notes):
