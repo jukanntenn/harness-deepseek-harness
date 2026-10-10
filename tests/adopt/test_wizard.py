@@ -359,8 +359,22 @@ class TestChecklist:
         assert all(status in output for status in STANDARD_STATUSES)
         assert "gh cannot edit those options; the mutation below sets all seven" in output
         assert 'query{user(login:"<owner>"){projectV2(number:<number>)' in output
-        assert "updateProjectV2Field(input:{projectId:$p,fieldId:$f,singleSelectOptions:[" in output
-        assert '{name:"Inbox"},{name:"Backlog"},{name:"Ready"},{name:"In progress"},' in output
+        # The current ProjectV2 schema: no projectId input, and every option
+        # needs a color from the fixed enum plus a description.
+        assert "updateProjectV2Field(input:{fieldId:$f,singleSelectOptions:[" in output
+        assert "projectId" not in output
+        assert " -f p=" not in output
+        assert " -f f=<fieldId>" in output
+        assert (
+            '{name:"Inbox",color:"GRAY",description:""},'
+            '{name:"Backlog",color:"PURPLE",description:""},'
+            '{name:"Ready",color:"BLUE",description:""},'
+            '{name:"In progress",color:"YELLOW",description:""},'
+            '{name:"In review",color:"ORANGE",description:""},'
+            '{name:"Done",color:"GREEN",description:""},'
+            '{name:"No action",color:"RED",description:""}'
+        ) in output
+        assert "BROWN" not in output
         assert 'organization(login:"<owner>")' in output
         field_create = (
             '--name Priority --data-type SINGLE_SELECT --single-select-options "p0,p1,p2,p3"'
