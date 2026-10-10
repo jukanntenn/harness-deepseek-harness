@@ -28,6 +28,19 @@ from hdsh.policy import rules
 
 TOOL = "hdsh adopt"
 
+#: Option colors for the standard statuses, positionally aligned with
+#: ``STANDARD_STATUSES``. The ProjectV2 option schema requires one color from
+#: its fixed enum (no BROWN among them) and a description per option.
+_STATUS_OPTION_COLORS: tuple[str, ...] = (
+    "GRAY",
+    "PURPLE",
+    "BLUE",
+    "YELLOW",
+    "ORANGE",
+    "GREEN",
+    "RED",
+)
+
 #: Sources of one resolved parameter, most to least authoritative.
 FLAG = "flag"
 CONFIG = "config.json"
@@ -358,7 +371,8 @@ def checklist_lines() -> list[str]:
         "  statuses on the built-in Status field: "
         + ", ".join(STANDARD_STATUSES)
         + " — gh cannot edit those options; the mutation below sets all seven in one"
-        " call (it replaces the whole option set)"
+        " call (it replaces the whole option set with no option ids, so run it"
+        " before items carry Status values)"
     )
     lines.append(
         "  board and Status-field ids (user entry shown; organization accounts use"
@@ -368,12 +382,16 @@ def checklist_lines() -> list[str]:
         '  gh api graphql -f query=\'query{user(login:"<owner>"){projectV2(number:<number>)'
         '{id field(name:"Status"){... on ProjectV2SingleSelectField{id}}}}}\''
     )
+    options = ",".join(
+        f'{{name:"{status}",color:"{color}",description:""}}'
+        for status, color in zip(STANDARD_STATUSES, _STATUS_OPTION_COLORS, strict=True)
+    )
     lines.append(
-        "  gh api graphql -f query='mutation($p:ID!,$f:ID!){updateProjectV2Field(input:"
-        "{projectId:$p,fieldId:$f,singleSelectOptions:["
-        + ",".join(f'{{name:"{status}"}}' for status in STANDARD_STATUSES)
-        + "]}){projectV2Field{... on ProjectV2SingleSelectField{options{name}}}}}'"
-        " -f p=<projectId> -f f=<fieldId>"
+        "  gh api graphql -f query='mutation($f:ID!){updateProjectV2Field(input:"
+        "{fieldId:$f,singleSelectOptions:["
+        + options
+        + "]}){projectV2Field{... on ProjectV2SingleSelectField{id}}}}}'"
+        " -f f=<fieldId>"
     )
     lines.append(
         "  gh project field-create <number> --owner <owner> --name Priority "

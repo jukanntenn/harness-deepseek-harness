@@ -335,6 +335,12 @@ def _resolve_parameters(
     existing = _existing_issue_config(root, blockers)
     if existing is not None:
         echoes.append("parameters resolved from the existing config.json (binding input)")
+        rebind = arguments.rebind
+        if rebind:
+            echoes.append(
+                "--rebind: the board number and title resolve from the flags, "
+                "and apply re-renders config.json with the new binding"
+            )
         for flag, field, flag_value, file_value in (
             ("--account-type", "accountType", arguments.account_type, existing.account_type),
             (
@@ -364,15 +370,18 @@ def _resolve_parameters(
                 existing.start_date_field,
             ),
         ):
-            if flag_value is not None and flag_value != file_value:
-                blockers.append(
-                    Blocker(
-                        flag,
-                        f"{flag_value!r} contradicts the existing config.json "
-                        f"{field} value {file_value!r}.",
-                        "Edit the file or drop the flag; adopt never guesses precedence.",
-                    )
+            if flag_value is None or flag_value == file_value:
+                continue
+            if rebind and flag in _REBIND_OVERRIDABLE_FLAGS:
+                continue
+            blockers.append(
+                Blocker(
+                    flag,
+                    f"{flag_value!r} contradicts the existing config.json "
+                    f"{field} value {file_value!r}.",
+                    "Edit the file or drop the flag; adopt never guesses precedence.",
                 )
+            )
         if tuple(existing.statuses) != corpus.STANDARD_STATUSES:
             blockers.append(
                 Blocker(
@@ -386,8 +395,8 @@ def _resolve_parameters(
             owner=owner,
             repository=repository,
             account_type=existing.account_type,
-            project_number=existing.project_number,
-            project_title=existing.project_title,
+            project_number=arguments.project_number if rebind else existing.project_number,
+            project_title=arguments.project_title if rebind else existing.project_title,
             lifecycle_actor=existing.lifecycle_actor,
             time_zone=existing.project_time_zone,
             priority_field=existing.priority_field,
@@ -617,7 +626,7 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
     )
 
     writes, skipped, pending_merges = _plan_clobbers(
-        root, writes, skipped, blockers, pending_merges
+        root, writes, skipped, blockers, pending_merges, rebind=arguments.rebind
     )
     if blockers:
         raise _blockers_error(blockers, notes)
@@ -991,6 +1000,8 @@ def _plan_clobbers(
     skipped: list[str],
     blockers: list[Blocker],
     pending_merges: list[str],
+    *,
+    rebind: bool = False,
 ) -> tuple[list[PlannedWrite], list[str], list[str]]:
     """Refuse to overwrite consumer-owned files; skip an existing root AGENTS.md.
 
@@ -1001,6 +1012,9 @@ def _plan_clobbers(
         blockers: Collected blockers; clobbering files append here.
         pending_merges: Destinations left untouched behind a consumer file,
             appended here for manifest tracking.
+        rebind: Whether this run rebinds the board: the rendered
+            ``config.json`` deliberately replaces the existing one instead of
+            staying untouched consumer configuration.
 
     Returns:
         The ``(kept writes, skipped notes, pending merges)`` triple.
@@ -1019,6 +1033,18 @@ def _plan_clobbers(
             kept.append(write)
             continue
         if write.dest in corpus.CONSUMER_CONFIG_DESTINATIONS:
+            if rebind and write.dest == ".github/issue-management/config.json":
+                # The rebind cannot land as a committable state any other
+                # way: the anchor check rejects config-ahead-of-manifest, and
+                # apply refuses a dirty tree — so this run itself re-renders
+                # the binding file from its own config-derived parameters.
+                kept.append(write)
+                skipped.append(
+                    f"{write.dest}: re-rendered by --rebind with the passed board "
+                    "number and title; every other value keeps its config.json "
+                    "resolution"
+                )
+                continue
             skipped.append(
                 f"{write.dest}: existing consumer-owned configuration left untouched; "
                 "verify checks its structure instead of its bytes"
@@ -1113,6 +1139,15 @@ def _add_adopt_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="<title>",
         required=True,
         help="GitHub Project title backing issue management",
+    )
+    parser.add_argument(
+        "--rebind",
+        action="store_true",
+        help=(
+            "move the adoption to the passed --project-number (and --project-title): "
+            "the flags override the existing config.json instead of contradicting "
+            "it, and apply re-renders the config with the new binding"
+        ),
     )
     parser.add_argument(
         "--lifecycle-actor",
@@ -1309,7 +1344,8 @@ def _consumer_config_drift(root: str, manifest: AdoptManifest) -> list[str]:
                 problems.append(
                     f"{dest}: projectNumber {config.project_number} no longer matches the "
                     f"bound board {manifest.project_anchor}; if the board moved deliberately, "
-                    "rerun hdsh adopt apply with the new number to rebind"
+                    "rerun hdsh adopt apply --rebind --project-number <n> (and --project-title) "
+                    "from a clean worktree to rebind — revert any hand edit to this file first"
                 )
         elif dest == ".hdsh/pairing.manifest.json":
             try:

@@ -36,6 +36,10 @@ runs:
       uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       with:
         python-version: "3.13"
+        # The engine is one wheel from the pinned ref; a cache miss on the
+        # skip paths makes setup-uv's post step fail the job, turning the
+        # documented skip-with-a-notice into a red check.
+        enable-cache: false
     - name: Resolve deployment flavor and credentials
       # The checked-out config decides which credential flavor must exist;
       # the later `||` selections are proven by this step, not silent defaults.

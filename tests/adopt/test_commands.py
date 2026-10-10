@@ -1105,7 +1105,48 @@ class TestWizardIntegration:
         assert verify_cli() == 1
         error = capsys.readouterr().err
         assert "no longer matches the bound board 3" in error
-        assert "rerun hdsh adopt apply with the new number to rebind" in error
+        assert "rerun hdsh adopt apply --rebind --project-number <n>" in error
+
+    def test_rebind_rewrites_the_binding_config_and_the_anchor(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        capsys.readouterr()
+        assert (
+            apply_cli(
+                *adopt_arguments(
+                    "--rebind", "--project-number", "9", "--project-title", "Moved Board"
+                )
+            )
+            == 0
+        )
+        output = capsys.readouterr().out
+        assert "--rebind: the board number and title resolve from the flags" in output
+        assert ".github/issue-management/config.json: re-rendered by --rebind" in output
+        config = json.loads(
+            (consumer.root / ".github" / "issue-management" / "config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert config["projectNumber"] == 9
+        assert config["projectTitle"] == "Moved Board"
+        assert config["lifecycleActor"] == "consumer-bot"
+        manifest = json.loads(
+            (consumer.root / ".hdsh" / "adopt.manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["projectAnchor"] == 9
+        capsys.readouterr()
+        assert verify_cli() == 1  # placeholders remain, but no anchor drift
+        assert "no longer matches the bound board" not in capsys.readouterr().err
+
+    def test_rebind_does_not_waive_non_board_contradictions(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert apply_cli(*adopt_arguments()) == 0
+        commit_all(consumer, "adopt hdsh")
+        assert apply_cli(*adopt_arguments("--rebind", "--account-type", "organization")) == 1
+        assert "contradicts the existing config.json accountType" in capsys.readouterr().err
 
     def test_a_matching_board_number_does_not_conflict(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
