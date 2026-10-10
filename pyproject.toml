@@ -6,7 +6,12 @@ readme = "README.md"
 authors = [{ name = "harness-deepseek-harness maintainers" }]
 license = { text = "MIT" }
 requires-python = ">=3.12"
-dependencies = ["markdown-it-py>=3.0.0"]
+dependencies = [
+    "markdown-it-py>=3.0.0",
+    # zoneinfo reads the system tz database, which Windows lacks; the PyPI
+    # tzdata wheel is the platform's only IANA source there.
+    "tzdata; sys_platform == 'win32'",
+]
 
 [project.urls]
 Repository = "https://github.com/jukanntenn/harness-deepseek-harness"

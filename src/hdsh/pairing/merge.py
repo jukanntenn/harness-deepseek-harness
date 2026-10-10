@@ -24,6 +24,7 @@ from hdsh.pairing.corpus import is_scope_file, pair_source_predicate
 from hdsh.pairing.git import (
     GitError,
     blob_hash,
+    canonical_blob_bytes,
     git_merge_input_paths,
     read_git_index_blob,
     run_git,
@@ -339,8 +340,8 @@ def merge_records(
         generated=generated,
         public_blob_root=public_blob_root,
     )
-    source_hash = store_git_blob(root, source_content)
-    zh_hash = store_git_blob(root, zh_content)
+    source_hash = store_git_blob(root, canonical_blob_bytes(source_content))
+    zh_hash = store_git_blob(root, canonical_blob_bytes(zh_content))
     return PairingMergeResult(
         source_hash=source_hash,
         zh_hash=zh_hash,
@@ -492,18 +493,21 @@ def resolve_conflicts(
             )
             paths = pair_paths_from_meta(meta_path)
             staged_source = read_git_index_blob(root, paths.source)
-            if staged_source is None or staged_source[0] != result.source_hash:
+            if (
+                staged_source is None
+                or blob_hash(canonical_blob_bytes(staged_source[1])) != result.source_hash
+            ):
                 msg = f"{paths.source} staged merge does not match the pairing driver's clean merge"
                 raise ValueError(msg)
             staged_zh = read_git_index_blob(root, paths.zh)
-            if staged_zh is None or staged_zh[0] != result.zh_hash:
+            if staged_zh is None or blob_hash(canonical_blob_bytes(staged_zh[1])) != result.zh_hash:
                 msg = f"{paths.zh} staged merge does not match the pairing driver's clean merge"
                 raise ValueError(msg)
             for path, expected in (
                 (paths.source, result.source_hash),
                 (paths.zh, result.zh_hash),
             ):
-                if blob_hash(Path(root, path).read_bytes()) != expected:
+                if blob_hash(canonical_blob_bytes(Path(root, path).read_bytes())) != expected:
                     msg = (
                         f"{path} has unstaged content; refusing to confirm bytes "
                         "outside the merge result"
@@ -513,7 +517,7 @@ def resolve_conflicts(
         except (ValueError, GitError, OSError) as error:
             failures.append((meta_path, str(error)))
     for meta_path, record in resolutions:
-        Path(root, meta_path).write_text(record, encoding="utf-8")
+        Path(root, meta_path).write_bytes(record.encode("utf-8"))
     if resolutions:
         run_git(
             root,
@@ -697,5 +701,5 @@ def driver_main(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    Path(current_path).write_text(result.record_text, encoding="utf-8")
+    Path(current_path).write_bytes(result.record_text.encode("utf-8"))
     return 0

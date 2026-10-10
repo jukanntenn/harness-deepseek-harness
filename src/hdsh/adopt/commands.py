@@ -51,6 +51,9 @@ ACCOUNT_TYPES = ("user", "organization")
 SHARED_DESTINATIONS = frozenset({".gitattributes", "prek.toml"})
 STANDING_ORDERS_DESTINATIONS = frozenset({"AGENTS.md", "docs/AGENTS.md"})
 PLACEHOLDER_MARKER = "TODO(adopt):"
+#: Board-identity flags a ``--rebind`` run may override against the binding
+#: config.json — the anchor contract needs number and title to move together.
+_REBIND_OVERRIDABLE_FLAGS = frozenset({"--project-number", "--project-title"})
 _PENDING_LINK = re.compile(r"\]\(([^)\s]+)\)")
 _PENDING_FENCE = re.compile(r"^\s*(?:```|~~~)")
 
@@ -449,7 +452,9 @@ def _resolve_or_block(
     try:
         resolution = resolve()
     except wizard.WizardError as error:
-        blockers.append(Blocker(flag, f"the parameter could not be derived ({error}).", str(error)))
+        # The wizard message already carries its remedy; repeating it as the
+        # reason would print the same sentences twice in one diagnostic line.
+        blockers.append(Blocker(flag, "the parameter could not be derived.", str(error)))
         return ""
     echoes.append(f"resolved {resolution.echo}")
     return resolution.value
@@ -572,6 +577,8 @@ def _preflight(root: str, arguments: argparse.Namespace) -> AdoptionPlan:
                 (_TEMPLATES_ROOT / template).read_text(encoding="utf-8"), parameters, today
             )
         )
+        if dest == ".hdsh/docs.manifest.json":
+            rendered = _without_consumer_budgets(rendered, consumer_owned, notes)
         writes.append(PlannedWrite(dest=dest, content=rendered.encode("utf-8")))
         if dest in corpus.TEMPLATE_PAIRS:
             records.append(dest)
@@ -833,6 +840,36 @@ def _wrap_sizing_note(root: str, writes: list[PlannedWrite]) -> str | None:
         f"{documents} pre-existing file(s) must reflow to one physical line per "
         "paragraph — budget one mechanical reflow commit"
     )
+
+
+def _without_consumer_budgets(rendered: str, consumer_owned: set[str], notes: list[str]) -> str:
+    """Drop docBudgets entries naming documents adoption leaves untouched.
+
+    A pre-existing consumer document keeps its real length, so the template's
+    default ceiling would turn the budgets gate red on apply day for content
+    adoption never wrote. No ceiling is installed for those destinations; the
+    consumer sets one when the document stabilizes.
+
+    Args:
+        rendered: The rendered ``.hdsh/docs.manifest.json`` template.
+        consumer_owned: Destinations adoption leaves untouched because a
+            consumer file pre-existed.
+        notes: Plan status lines; the drop is announced here.
+
+    Returns:
+        The manifest text without the consumer-owned budget entries.
+    """
+    manifest = json.loads(rendered)
+    dropped = sorted(set(manifest["docBudgets"]) & consumer_owned)
+    if not dropped:
+        return rendered
+    for dest in dropped:
+        del manifest["docBudgets"][dest]
+    notes.append(
+        ".hdsh/docs.manifest.json: installed no word budget for the pre-existing "
+        f"{', '.join(dropped)} — set a ceiling there once the document stabilizes"
+    )
+    return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
 
 
 def _load_previous_manifest(root: str, blockers: list[Blocker]) -> AdoptManifest | None:

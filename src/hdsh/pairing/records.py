@@ -106,7 +106,10 @@ def parse_record(content: str, paths: PairPaths) -> PairingRecord | None:
         The two hashes, or ``None`` for malformed, duplicate, or unexpected keys.
     """
     hashes: dict[str, str] = {}
-    for line in content.split("\n"):
+    for raw_line in content.split("\n"):
+        # A checkout smudge filter may hand the sidecar CRLF line endings;
+        # the record grammar covers lines, not their platform endings.
+        line = raw_line.removesuffix("\r")
         if line == "" or line.startswith("#"):
             continue
         match = _META_LINE.match(line)

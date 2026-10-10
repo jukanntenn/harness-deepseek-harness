@@ -22,7 +22,13 @@ from typing import TYPE_CHECKING, Protocol
 
 from hdsh.pairing import links as pairing_links
 from hdsh.pairing.corpus import corpus_file_predicate
-from hdsh.pairing.git import blob_hash, git_index_paths, read_git_index_blob, store_git_blob
+from hdsh.pairing.git import (
+    blob_hash,
+    canonical_blob_bytes,
+    git_index_paths,
+    read_git_index_blob,
+    store_git_blob,
+)
 from hdsh.pairing.manifest import MANIFEST_PATH, manifest_excluded, parse_manifest
 from hdsh.pairing.records import (
     PairingRecord,
@@ -474,18 +480,19 @@ def _write_records(
             return 2
         # A consistency record is also a recovery pointer: persist both
         # snapshots even when the sidecar text is already current, because the
-        # bytes may exist only in this working tree.
+        # bytes may exist only in this working tree. Snapshots store the
+        # canonical line-ending form, so every content plane hashes alike.
         record = render_record(
             paths,
             PairingRecord(
-                source_hash=store_git_blob(repository.root, source_content),
-                zh_hash=store_git_blob(repository.root, zh_content),
+                source_hash=store_git_blob(repository.root, canonical_blob_bytes(source_content)),
+                zh_hash=store_git_blob(repository.root, canonical_blob_bytes(zh_content)),
             ),
         )
         meta_path = Path(repository.root, paths.meta)
         if meta_path.is_file() and meta_path.read_text(encoding="utf-8") == record:
             continue
-        meta_path.write_text(record, encoding="utf-8")
+        meta_path.write_bytes(record.encode("utf-8"))
         stdout(f"{TOOL}: recorded {paths.meta}")
         written += 1
     stdout(f"{TOOL}: {written} record(s) written; run the check to validate the pairs.")
@@ -569,7 +576,7 @@ def _check_pair(
         (paths.source, source_content, record.source_hash),
         (paths.zh, zh_content, record.zh_hash),
     ):
-        if blob_hash(content) != recorded:
+        if blob_hash(canonical_blob_bytes(content)) != recorded:
             errors.append(
                 f"{file}: out of sync — content no longer matches the pair's last "
                 f"confirmed-consistent state in {paths.meta} (bring the other side "
