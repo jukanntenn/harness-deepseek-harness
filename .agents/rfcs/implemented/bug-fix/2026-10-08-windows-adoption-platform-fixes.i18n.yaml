@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/bug-fix/2026-10-08-windows-adoption-platform-fixes.md
+2026-10-08-windows-adoption-platform-fixes.md: 64a5f2ef725098d2164282deb2350c05dcfc2003
+2026-10-08-windows-adoption-platform-fixes.zh.md: 34db4c9e17bd8aade443587f61f193f4c157e4db

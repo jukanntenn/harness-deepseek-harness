@@ -316,12 +316,20 @@ class TestProjectScopeNotice:
         assert notice is not None
         assert "gh auth refresh -s project" in notice
 
+    def test_ghs_list_marker_form_discloses_scopes_too(self) -> None:
+        # Current gh prints the scopes line behind a `- ` list marker; the
+        # notice must fire there, or a scopeless token passes preflight.
+        notice = wizard.gh_project_scope_notice("  - Token scopes: 'gist', 'read:org', 'repo'")
+        assert notice is not None
+        assert "gh auth refresh -s project" in notice
+
     def test_no_disclosed_scopes_stay_silent(self) -> None:
         assert wizard.gh_project_scope_notice("Logged in to github.com") is None
         assert wizard.gh_project_scope_notice("") is None
 
     def test_any_mention_of_project_counts(self) -> None:
         assert wizard.gh_project_scope_notice("Token scopes: read:project, repo") is None
+        assert wizard.gh_project_scope_notice("- Token scopes: 'project', 'repo'") is None
 
 
 class TestChecklist:

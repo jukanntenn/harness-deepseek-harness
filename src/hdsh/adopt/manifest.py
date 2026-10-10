@@ -186,4 +186,4 @@ def save_manifest(root: str, manifest: AdoptManifest) -> None:
     }
     path = Path(root, MANIFEST_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_bytes((json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))

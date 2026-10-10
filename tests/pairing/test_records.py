@@ -43,6 +43,12 @@ class TestRecordParse:
         )
         assert record == PairingRecord("a" * 40, "b" * 40)
 
+    def test_parses_a_crlf_sidecar_from_a_smudged_checkout(self) -> None:
+        record = parse_record(
+            f"# note\r\nguide.md: {'a' * 40}\r\nguide.zh.md: {'b' * 40}\r\n", self.paths
+        )
+        assert record == PairingRecord("a" * 40, "b" * 40)
+
     def test_rejects_missing_sibling(self) -> None:
         assert parse_record(f"guide.md: {'a' * 40}\n", self.paths) is None
 

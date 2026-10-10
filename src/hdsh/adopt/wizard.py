@@ -258,8 +258,10 @@ def resolve_lifecycle_actor(explicit: str | None, transport: Transport | None) -
     return Resolution(login, DERIVED, f"--lifecycle-actor {login} (derived from the gh identity)")
 
 
-#: gh reports the authenticated token's scopes on lines of this form.
+#: gh reports the authenticated token's scopes on a ``Token scopes: `` line,
+#: carried bare or behind gh's ``- `` list marker depending on the gh version.
 _GH_SCOPE_LINE = "Token scopes: "
+_GH_LIST_MARKER = "- "
 
 _PROJECT_SCOPE_NOTICE = (
     "gh token lacks the 'project' scope; creating the Phase 1 board needs it — "
@@ -282,6 +284,8 @@ def gh_project_scope_notice(gh_auth_stdout: str) -> str | None:
     disclosed = []
     for line in gh_auth_stdout.splitlines():
         stripped = line.strip()
+        if stripped.startswith(_GH_LIST_MARKER):
+            stripped = stripped.removeprefix(_GH_LIST_MARKER)
         if stripped.startswith(_GH_SCOPE_LINE):
             disclosed.append(stripped.removeprefix(_GH_SCOPE_LINE))
     if not disclosed or any("project" in line for line in disclosed):

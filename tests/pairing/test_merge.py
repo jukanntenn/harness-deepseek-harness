@@ -272,6 +272,20 @@ class TestResolveMode:
         git("commit", "--no-edit", cwd=repo.root)
         assert gate_check(repo, ANCHOR) == 0
 
+    def test_an_eol_only_worktree_flip_still_resolves(self, repo: Repo) -> None:
+        build_divergent_pair(repo)
+        start_conflicted_merge(repo)
+        # A checkout smudge filter flipped the owner bytes to CRLF after the
+        # merge staged them; line-ending-only drift is not unstaged content.
+        for side in (ANCHOR, "docs/guide.zh.md"):
+            path = repo.root / side
+            flipped = path.read_text(encoding="utf-8").replace("\n", "\r\n")
+            path.write_bytes(flipped.encode("utf-8"))
+        resolved = resolve_conflicts(
+            str(repo.root), pairing_source(str(repo.root)), generated=(), public_blob_root=""
+        )
+        assert resolved == [META]
+
     def test_edited_conflict_content_is_refused(self, repo: Repo) -> None:
         build_divergent_pair(repo)
         start_conflicted_merge(repo)
@@ -885,7 +899,7 @@ class TestMergeGuardBranches:
         def skewed(root: str, path: str) -> tuple[str, bytes] | None:
             staged = original(root, path)
             if staged is not None and path == ANCHOR:
-                return ("f" * 40, staged[1])
+                return (staged[0], staged[1] + b"skewed staged bytes\n")
             return staged
 
         monkeypatch.setattr(merge_module, "read_git_index_blob", skewed)
@@ -916,7 +930,7 @@ class TestMergeGuardBranches:
         def skewed(root: str, path: str) -> tuple[str, bytes] | None:
             staged = original(root, path)
             if staged is not None and path == "docs/guide.zh.md":
-                return ("f" * 40, staged[1])
+                return (staged[0], staged[1] + b"skewed staged bytes\n")
             return staged
 
         monkeypatch.setattr(merge_module, "read_git_index_blob", skewed)

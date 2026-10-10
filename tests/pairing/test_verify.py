@@ -461,6 +461,47 @@ class TestCachedMode:
         assert any("out of sync" in line for line in err)
 
 
+class TestLineEndingStability:
+    """Records hash the LF-canonical form, so checkout eol flips stay green."""
+
+    @staticmethod
+    def _smudge_to_crlf(repo: Repo, relative: str) -> None:
+        path = repo.root / relative
+        smudged = path.read_text(encoding="utf-8").replace("\n", "\r\n")
+        path.write_bytes(smudged.encode("utf-8"))
+
+    def test_records_crlf_content_and_writes_lf_sidecars(self, repo: Repo) -> None:
+        write_pair(repo, "docs/guide.md")
+        self._smudge_to_crlf(repo, "docs/guide.md")
+        self._smudge_to_crlf(repo, "docs/guide.zh.md")
+        record(repo, "docs/guide.md")
+        assert b"\r" not in (repo.root / "docs/guide.i18n.yaml").read_bytes()
+        code, _, err = run(repo, "verify", "docs/guide.md")
+        assert code == 0, err
+
+    def test_an_eol_flip_after_recording_stays_green_on_both_planes(self, repo: Repo) -> None:
+        write_pair(repo, "docs/guide.md")
+        record(repo, "docs/guide.md")
+        self._smudge_to_crlf(repo, "docs/guide.md")
+        self._smudge_to_crlf(repo, "docs/guide.zh.md")
+        code, _, err = run(repo, "verify", "docs/guide.md")
+        assert code == 0, err
+        repo.add_all()
+        code, _, err = run(repo, "verify", "--cached", "docs/guide.md")
+        assert code == 0, err
+
+    def test_real_content_drift_still_goes_red_under_crlf(self, repo: Repo) -> None:
+        write_pair(repo, "docs/guide.md")
+        self._smudge_to_crlf(repo, "docs/guide.md")
+        self._smudge_to_crlf(repo, "docs/guide.zh.md")
+        record(repo, "docs/guide.md")
+        smudged = (repo.root / "docs/guide.md").read_bytes()
+        (repo.root / "docs/guide.md").write_bytes(smudged + b"real drift\r\n")
+        code, _, err = run(repo, "verify", "docs/guide.md")
+        assert code == 1
+        assert any("out of sync" in line for line in err)
+
+
 def test_request_dataclass_defaults() -> None:
     request = PairingRequest(input="worktree", mode="check", scope="pairs")
     assert request.anchors == ()

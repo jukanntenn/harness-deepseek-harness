@@ -892,8 +892,8 @@ def _diff_texts(root: str, before: str, after: str) -> str:
     with tempfile.TemporaryDirectory(prefix="hdsh-pairing-brief-") as temporary:
         before_path = Path(temporary, "last-confirmed.md")
         after_path = Path(temporary, "current.md")
-        before_path.write_text(before, encoding="utf-8")
-        after_path.write_text(after, encoding="utf-8")
+        before_path.write_bytes(before.encode("utf-8"))
+        after_path.write_bytes(after.encode("utf-8"))
         result = subprocess.run(
             [
                 "git",
@@ -1117,7 +1117,7 @@ def _apply_mechanical(
             f"structure: {'; '.join(errors)}"
         )
         raise ValueError(message)
-    Path(root, counterpart_path).write_text(result, encoding="utf-8")
+    Path(root, counterpart_path).write_bytes(result.encode("utf-8"))
     stderr(
         f"{TOOL}: applied code-fence splice to {counterpart_path}; "
         "review the diff, then record the pair."

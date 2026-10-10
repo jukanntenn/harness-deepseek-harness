@@ -467,7 +467,7 @@ def run(root: Path, *, seal: bool) -> int:
     if seal and (
         not manifest_path.is_file() or manifest_path.read_text(encoding="utf-8") != rendered
     ):
-        manifest_path.write_text(rendered, encoding="utf-8")
+        manifest_path.write_bytes(rendered.encode("utf-8"))
     summary = (
         f"sealed {len(added)} new artifact(s); existing seals unchanged."
         if seal

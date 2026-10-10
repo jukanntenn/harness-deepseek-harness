@@ -17,7 +17,7 @@
 
 先主机安装 hdsh（PyPI 发布前用 `uv tool install "harness-deepseek-harness @ git+<url>@<ref>"`），用 `hdsh adopt preflight` 确认工具链（git、已认证的 gh、裸 `hdsh --version`、以及 `rg --version`——各 skill 以 ripgrep 为前提），带上阶段 1 的编号审阅 `hdsh adopt plan` 后再 `hdsh adopt apply`。两者都显性失败——每个阻塞一条诊断：
 
-只有 Project 编号与标题需要手输；其余缺省时自动推导（ref 取上游最新 tag、账户类型取 remote、actor 取 gh 身份、时区取系统——接入 RFC 日期仅首记一次，重跑复用），每个推导回显、每个旗标可覆盖、全旗标运行离线。apply 写入 prek 门禁条目与 `.gitattributes` 驱动行、两个薄策略 workflow、策略 `config.json`、issue 与 pull-request 模板、RFC 机制、全部九个 skill（五个镜像、四个槽位引导）、文档标准与 i18n 契约、actionlint 桥接文件、模板化的 `architecture.md` 与 `development.md` 配对，并在没有根 `AGENTS.md` 时写入模板化的常令文件。它记录自己安装的每一对双语配对——既存的 `architecture.md` 或 `development.md` 连同对侧模板与记录一并免写——打印发现的配对语料规模与存量语料的 wrap 重排成本，并写下 `.hdsh/adopt.manifest.json`。接入 PR 是 workflow 认得的引导时刻：合并前两个 workflow 只对它跳过并注记，其余没有可用策略 config 的运行显性失败——无论接入是引入 config 还是替换旧有配置，都无需带红合并。
+只有 Project 编号与标题需要手输；其余缺省时自动推导（ref 取上游最新 tag、账户类型取 remote、actor 取 gh 身份、时区取系统——Windows 须显式传 `--time-zone`——接入 RFC 日期仅首记一次，重跑复用），每个推导回显、每个旗标可覆盖、全旗标运行离线。apply 写入 prek 门禁条目与 `.gitattributes` 驱动行、两个薄策略工作流、策略 `config.json`、issue 与 pull-request 模板、RFC 机制、全部九个 skill（五个镜像、四个槽位引导）、文档标准与 i18n 契约、actionlint 桥接文件、模板化的 `architecture.md` 与 `development.md` 配对，并在没有根 `AGENTS.md` 时写入模板化的常令文件。它记录自己安装的每一对双语配对——既存的 `architecture.md` 或 `development.md` 连同对侧模板、记录与模板词数预算一并免写——打印发现的配对语料规模与存量语料的 wrap 重排成本，并写下 `.hdsh/adopt.manifest.json`。接入 PR 是 workflow 认得的引导时刻：合并前两个工作流只对它跳过并注记，其余没有可用策略 config 的运行显性失败——无论接入是引入 config 还是替换旧有配置，都无需带红合并。
 
 ## 阶段 3 —— 补全判断的一半
 
@@ -25,7 +25,7 @@
 
 ## 阶段 4 —— 本地工作流层
 
-hdsh 已在阶段 2 主机安装；每个 worktree 运行一次 `hdsh worktree install` 装 prek 钩子与配对合并驱动，二者从 PATH 解析它。托管钩子带有 `hdsh` 组；CI 中每条带过滤的 `prek run` 都必须包含 `--group hdsh`，否则所有门禁静默退出运行——verify 会拒绝该缺失。不跑 prek 的 CI 自行接线——`prek run --all-files`，或钉版本安装 hdsh 后逐条运行托管门禁——verify 对零门禁的 CI 同样拒绝。apply 写入 `.github/actionlint.yaml` 桥接（按文件、按消息正则的 schema），过滤较旧 actionlint 对 `field_added`、`field_removed` 触发器的误报；该文件链接了官方文档所列活动类型，并写明移除条件。升级以更新的 ref 重跑 `hdsh adopt apply`。生成文件归上游所有：本地改动请引回上游，不要分叉。共享同一轮 prek 的消费方格式化器（prettier、shfmt 等）必须排除被安装路径——模板、`docs/i18n/**`、`.agents/**`、`.hdsh/**`——否则门禁在同轮标红其改写。
+hdsh 已在阶段 2 主机安装；每个 worktree 运行一次 `hdsh worktree install` 装 prek 钩子与配对合并驱动，二者从 PATH 解析它。托管钩子带有 `hdsh` 组；CI 中每条带过滤的 `prek run` 都必须包含 `--group hdsh`，否则所有门禁静默退出运行——verify 会拒绝该缺失。不跑 prek 的 CI 自行接线——`prek run --all-files`，或钉版本安装 hdsh 后逐条运行托管门禁——verify 对零门禁的 CI 同样拒绝。apply 写入 `.github/actionlint.yaml` 桥接（按文件、按消息正则），过滤较旧 actionlint 对 `field_added`、`field_removed` 触发器的误报；该文件链接了官方文档所列活动类型，并写明移除条件。升级以更新的 ref 重跑 `hdsh adopt apply`。生成文件归上游所有：本地改动请引回上游，不要分叉。共享同一轮 prek 的消费方格式化器（prettier、shfmt 等）必须排除被安装路径——`.github/**` 渲染产物（workflows、issue 模板、`actionlint.yaml`、`issue-management/config.json`）与模板、`docs/i18n/**`、`.agents/**`、`.hdsh/**`——否则门禁在同轮标红其改写。
 
 ## 退役既存的本地文档标准
 

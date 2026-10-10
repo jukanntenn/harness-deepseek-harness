@@ -31,6 +31,23 @@ def blob_hash(content: bytes) -> str:
     return digest.hexdigest()
 
 
+def canonical_blob_bytes(content: bytes) -> bytes:
+    """Return content in the canonical line-ending form the records hash.
+
+    Recorded and compared hashes cover the clean-filter view — CRLF pairs
+    normalized to LF — so a checkout under ``core.autocrlf`` or an eol flip
+    in the working tree cannot push a confirmed pair out of sync. On
+    LF-committed trees this is the identity.
+
+    Args:
+        content: Exact file bytes from any content plane.
+
+    Returns:
+        The bytes whose blob hash the pairing records name and store.
+    """
+    return content.replace(b"\r\n", b"\n")
+
+
 def run_git(
     root: str, args: list[str], operation: str, *, input_bytes: bytes | None = None
 ) -> bytes:

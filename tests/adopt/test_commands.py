@@ -204,6 +204,27 @@ class TestApplyRoundTrip:
         assert not (consumer.root / "docs" / "architecture.i18n.yaml").exists()
         assert "recorded 13 pair(s)" in output
 
+    def test_a_pre_existing_document_installs_no_template_word_budget(
+        self, consumer: Repo, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (consumer.root / "docs").mkdir(exist_ok=True)
+        (consumer.root / "docs" / "development.md").write_text(
+            "# Development\n\n" + "word " * 900 + "\n", encoding="utf-8"
+        )
+        commit_all(consumer)
+        assert apply_cli(*adopt_arguments()) == 0
+        output = capsys.readouterr().out
+        assert (
+            ".hdsh/docs.manifest.json: installed no word budget for the pre-existing "
+            "docs/development.md, docs/development.zh.md" in output
+        )
+        budgets = json.loads(
+            (consumer.root / ".hdsh" / "docs.manifest.json").read_text(encoding="utf-8")
+        )["docBudgets"]
+        assert "docs/development.md" not in budgets
+        assert "docs/development.zh.md" not in budgets
+        assert "docs/architecture.md" in budgets
+
     def test_an_adopt_installed_template_pair_still_records_on_reapply(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -692,6 +713,9 @@ class TestBlockers:
         error = capsys.readouterr().err
         assert "--hdsh-ref: the parameter could not be derived" in error
         assert "--account-type: the parameter could not be derived" in error
+        # The wizard message already carries its remedy; the diagnostic must
+        # not repeat it once as the reason and again as the suggestion.
+        assert error.count("was not passed and the owner type") == 1
 
     def test_refuses_invalid_parameters(
         self, consumer: Repo, capsys: pytest.CaptureFixture[str]
